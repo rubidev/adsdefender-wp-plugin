@@ -3058,6 +3058,7 @@ function adsdefender_page_sitescanner(): void
     $nonce_run    = wp_create_nonce('adsdefender_scan_run');
     $nonce_res    = wp_create_nonce('adsdefender_scan_resolve');
     $nonce_ign    = wp_create_nonce('adsdefender_scan_ignore');
+    $nonce_rechk  = wp_create_nonce('adsdefender_scan_recheck');
     $nonce_sucuri = wp_create_nonce('adsdefender_sucuri_scan');
     $nonce_chmod   = wp_create_nonce('adsdefender_chmod_fix');
     $nonce_dbscan  = wp_create_nonce('adsdefender_db_scan');
@@ -3127,8 +3128,12 @@ function adsdefender_page_sitescanner(): void
     <div id="sc-scan-result"></div>
 
     <?php if (!empty($results)): ?>
-    <h3 style="font-size:14px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid #eee">
-        📋 Kết quả quét (<?php echo count($results); ?> cảnh báo chưa xử lý)
+    <h3 style="font-size:14px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <span>📋 Kết quả quét (<?php echo count($results); ?> cảnh báo chưa xử lý)</span>
+        <button type="button" id="sc-recheck" class="button" style="font-weight:400;font-size:12px"
+                title="Chạy lại signature trên các file đã báo — xóa mục không còn đúng (vd: sau khi sửa luật bị báo nhầm)">
+            🔄 Kiểm tra lại
+        </button>
     </h3>
     <table class="sc-table">
         <thead>
@@ -3533,6 +3538,35 @@ function adsdefender_page_sitescanner(): void
                 }
             });
     });
+
+    // Kiểm tra lại: chạy signature trên các file đã báo, xóa mục không còn đúng
+    var reBtn = document.getElementById('sc-recheck');
+    if (reBtn) {
+        reBtn.addEventListener('click', function(){
+            reBtn.disabled = true;
+            var old = reBtn.textContent;
+            reBtn.textContent = '⏳ Đang kiểm tra...';
+            var fd = new FormData();
+            fd.append('action', 'adsdefender_scan_recheck');
+            fd.append('nonce', '<?php echo $nonce_rechk; ?>');
+            fetch(ajaxurl, {method:'POST', body:fd, credentials:'same-origin'})
+                .then(function(r){ return r.json(); })
+                .then(function(res){
+                    if (res.success) {
+                        alert(res.data.message);
+                        if (res.data.removed > 0) location.reload();
+                        else { reBtn.disabled = false; reBtn.textContent = old; }
+                    } else {
+                        alert('Lỗi: ' + (res.data || 'không rõ'));
+                        reBtn.disabled = false; reBtn.textContent = old;
+                    }
+                })
+                .catch(function(err){
+                    alert('Lỗi kết nối: ' + err);
+                    reBtn.disabled = false; reBtn.textContent = old;
+                });
+        });
+    }
 
     // Database scan
     var dbBtn = document.getElementById('db-btn-scan');

@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.115
+ * Version:      2.5.116
  * Author:       AdsDefender
  * Update URI:   https://github.com/rubidev/adsdefender-wp-plugin
  * Requires PHP: 7.4
@@ -98,6 +98,11 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.116 File Scanner: don ket qua cu khong con dung. Truoc day quet lai chi upsert va xoa
+ *          record cua file da bi xoa — canh bao cu nam lai vinh vien du signature da sua hay
+ *          file da duoc va. Nay moi lan quet se xoa cac cap file|signature khong con khop
+ *          (giu nguyen muc da danh dau 'ignored'). Them nut "Kiem tra lai" chay signature
+ *          tren cac file da bao ma khong can quet lai toan bo
  *  2.5.115 File Scanner: sua 2 bao dong gia.
  *          - mail_spam thieu neo dau tu nen "sanitize_email($_POST[...])" bi bat vi chu "mail"
  *            nam trong "sanitize_email". Them (?<![\w$>-]) — wp_mail/is_email/->mail() deu sach
@@ -263,7 +268,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.115');
+define('ADSDEFENDER_VERSION',        '2.5.116');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');
