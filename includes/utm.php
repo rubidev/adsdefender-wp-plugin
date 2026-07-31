@@ -288,49 +288,212 @@ function adsdefender_page_utm()
         echo '<div class="notice notice-success is-dismissible"><p>Đã xóa toàn bộ UTM log.</p></div>';
     }
 
-    $days  = max(1, min(90, (int) ($_GET['days'] ?? 30)));
-    $since = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+    // range: today | yesterday | N (số ngày). Dùng current_time() để theo múi giờ
+    // của site, không phải giờ UTC của server — nếu không, "hôm nay" sẽ lệch.
+    $range = sanitize_key($_GET['range'] ?? '');
+    if ($range === '' && isset($_GET['days'])) $range = (string) (int) $_GET['days'];
+    if ($range === '') $range = '30';
 
-    $total = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$t} WHERE created_at >= %s", $since));
-    $conv  = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$t} WHERE created_at >= %s AND conversion_type != ''", $since));
+    $today = current_time('Y-m-d');
+    if ($range === 'today') {
+        $since  = $today . ' 00:00:00';
+        $until  = $today . ' 23:59:59';
+        $days   = 1;
+        $period = 'Hôm nay ' . date_i18n('d/m/Y', strtotime($today));
+    } elseif ($range === 'yesterday') {
+        $y      = date('Y-m-d', strtotime($today . ' -1 day'));
+        $since  = $y . ' 00:00:00';
+        $until  = $y . ' 23:59:59';
+        $days   = 1;
+        $period = 'Hôm qua ' . date_i18n('d/m/Y', strtotime($y));
+    } else {
+        $days   = max(1, min(90, (int) $range));
+        $range  = (string) $days;
+        $since  = date('Y-m-d', strtotime($today . ' -' . ($days - 1) . ' days')) . ' 00:00:00';
+        $until  = $today . ' 23:59:59';
+        $period = date_i18n('d/m/Y', strtotime($since)) . ' — ' . date_i18n('d/m/Y', strtotime($today));
+    }
+
+    // Mọi truy vấn dùng chung khoảng [$since, $until] để các con số khớp nhau.
+    $win = $wpdb->prepare('created_at BETWEEN %s AND %s', $since, $until);
+
+    $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$t} WHERE {$win}");
+    $conv  = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$t} WHERE {$win} AND conversion_type != ''");
     $rate  = $total > 0 ? round($conv / $total * 100, 1) : 0;
 
-    $by_source = $wpdb->get_results($wpdb->prepare(
+    // ── Thống kê trong ngày ──────────────────────────────────────────────────
+    // Hôm nay so với hôm qua, và phân bố theo giờ để biết khung giờ nào đông.
+    $t_start = $today . ' 00:00:00';
+    $t_end   = $today . ' 23:59:59';
+    $y_date  = date('Y-m-d', strtotime($today . ' -1 day'));
+
+    $today_sessions = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM {$t} WHERE created_at BETWEEN %s AND %s", $t_start, $t_end));
+    $today_conv = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM {$t} WHERE created_at BETWEEN %s AND %s AND conversion_type != ''", $t_start, $t_end));
+    $yest_sessions = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM {$t} WHERE created_at BETWEEN %s AND %s", $y_date . ' 00:00:00', $y_date . ' 23:59:59'));
+    $yest_conv = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM {$t} WHERE created_at BETWEEN %s AND %s AND conversion_type != ''", $y_date . ' 00:00:00', $y_date . ' 23:59:59'));
+
+    // Phân bố theo giờ của hôm nay (0-23)
+    $hourly = array_fill(0, 24, ['sessions' => 0, 'conv' => 0]);
+    $rows_h = $wpdb->get_results($wpdb->prepare(
+        "SELECT HOUR(created_at) AS h, COUNT(*) AS sessions,
+                SUM(conversion_type != '') AS conv
+         FROM {$t} WHERE created_at BETWEEN %s AND %s
+         GROUP BY HOUR(created_at)", $t_start, $t_end));
+    foreach ($rows_h as $r) {
+        $h = (int) $r->h;
+        if ($h >= 0 && $h <= 23) $hourly[$h] = ['sessions' => (int) $r->sessions, 'conv' => (int) $r->conv];
+    }
+
+    // Xu hướng từng ngày trong khoảng đang xem (tối đa 30 cột cho dễ nhìn)
+    $daily = $wpdb->get_results($wpdb->prepare(
+        "SELECT DATE(created_at) AS d, COUNT(*) AS sessions,
+                SUM(conversion_type != '') AS conv
+         FROM {$t} WHERE created_at BETWEEN %s AND %s
+         GROUP BY DATE(created_at) ORDER BY d ASC LIMIT 90", $since, $until));
+
+    $by_source = $wpdb->get_results(
         "SELECT utm_source, utm_medium, COUNT(*) as sessions,
          SUM(conversion_type != '') as conversions
-         FROM {$t} WHERE created_at >= %s AND utm_source != ''
-         GROUP BY utm_source, utm_medium ORDER BY sessions DESC LIMIT 20", $since
-    ));
-    $by_campaign = $wpdb->get_results($wpdb->prepare(
+         FROM {$t} WHERE {$win} AND utm_source != ''
+         GROUP BY utm_source, utm_medium ORDER BY sessions DESC LIMIT 20"
+    );
+    $by_campaign = $wpdb->get_results(
         "SELECT utm_campaign, utm_source, COUNT(*) as sessions,
          SUM(conversion_type != '') as conversions
-         FROM {$t} WHERE created_at >= %s AND utm_campaign != ''
-         GROUP BY utm_campaign, utm_source ORDER BY conversions DESC, sessions DESC LIMIT 20", $since
-    ));
-    $by_conv = $wpdb->get_results($wpdb->prepare(
+         FROM {$t} WHERE {$win} AND utm_campaign != ''
+         GROUP BY utm_campaign, utm_source ORDER BY conversions DESC, sessions DESC LIMIT 20"
+    );
+    $by_conv = $wpdb->get_results(
         "SELECT conversion_type, conversion_label, COUNT(*) as cnt
-         FROM {$t} WHERE created_at >= %s AND conversion_type != ''
-         GROUP BY conversion_type, conversion_label ORDER BY cnt DESC", $since
-    ));
-    $recent = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM {$t} WHERE created_at >= %s ORDER BY created_at DESC LIMIT 50", $since
-    ));
+         FROM {$t} WHERE {$win} AND conversion_type != ''
+         GROUP BY conversion_type, conversion_label ORDER BY cnt DESC"
+    );
+    $recent = $wpdb->get_results(
+        "SELECT * FROM {$t} WHERE {$win} ORDER BY created_at DESC LIMIT 50"
+    );
     ?>
 <p style="color:#555">Theo dõi nguồn traffic → chuyển đổi (click Zalo, Phone, Messenger...).</p>
 
 <!-- Lọc ngày -->
-<div style="margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-  <?php foreach ([7,14,30,60,90] as $d): ?>
-  <a href="<?php echo esc_url(add_query_arg('days', $d)); ?>"
-     class="button <?php echo $days==$d?'button-primary':''; ?>"><?php echo $d; ?> ngày</a>
+<div style="margin-bottom:20px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <?php
+  $ranges = ['today' => 'Hôm nay', 'yesterday' => 'Hôm qua',
+             '7' => '7 ngày', '14' => '14 ngày', '30' => '30 ngày', '60' => '60 ngày', '90' => '90 ngày'];
+  foreach ($ranges as $k => $lbl):
+      $url = esc_url(add_query_arg(['range' => $k, 'days' => false]));
+  ?>
+  <a href="<?php echo $url; ?>" class="button <?php echo $range === $k ? 'button-primary' : ''; ?>"><?php echo $lbl; ?></a>
   <?php endforeach; ?>
-  <span style="color:#666;font-size:13px">Từ <?php echo date('d/m/Y', strtotime("-{$days} days")); ?> đến hôm nay</span>
+  <span style="color:#666;font-size:13px;margin-left:4px"><?php echo esc_html($period); ?></span>
 </div>
+
+<!-- Thống kê trong ngày -->
+<?php
+$d_sess = $today_sessions - $yest_sessions;
+$d_conv = $today_conv - $yest_conv;
+$t_rate = $today_sessions > 0 ? round($today_conv / $today_sessions * 100, 1) : 0;
+$y_rate = $yest_sessions  > 0 ? round($yest_conv  / $yest_sessions  * 100, 1) : 0;
+$peak_h = 0; $peak_v = 0;
+foreach ($hourly as $h => $v) { if ($v['sessions'] > $peak_v) { $peak_v = $v['sessions']; $peak_h = $h; } }
+$max_h  = max(1, $peak_v);
+$now_h  = (int) current_time('G');
+
+function adsdefender_utm_delta(int $d): string
+{
+    if ($d === 0) return '<span style="color:#888;font-size:12px">— không đổi</span>';
+    $up  = $d > 0;
+    $col = $up ? '#00a32a' : '#d63638';
+    return '<span style="color:' . $col . ';font-size:12px;font-weight:600">'
+         . ($up ? '▲ +' : '▼ ') . $d . ' so với hôm qua</span>';
+}
+?>
+<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:18px 20px;margin-bottom:24px">
+  <h3 style="margin:0 0 14px;display:flex;align-items:center;gap:8px">
+    📅 Hôm nay — <?php echo date_i18n('d/m/Y'); ?>
+    <span style="font-weight:400;font-size:12px;color:#888">cập nhật lúc <?php echo current_time('H:i'); ?></span>
+  </h3>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px">
+    <?php foreach ([
+      ['Sessions hôm nay',  $today_sessions, '#2271b1', adsdefender_utm_delta($d_sess)],
+      ['Chuyển đổi hôm nay',$today_conv,     '#00a32a', adsdefender_utm_delta($d_conv)],
+      ['Tỷ lệ chuyển đổi',  $t_rate . '%',   '#f0860a', '<span style="color:#888;font-size:12px">hôm qua ' . $y_rate . '%</span>'],
+      ['Giờ cao điểm',      $peak_v > 0 ? sprintf('%02d:00', $peak_h) : '—', '#7048e8',
+       '<span style="color:#888;font-size:12px">' . ($peak_v > 0 ? $peak_v . ' sessions' : 'chưa có dữ liệu') . '</span>'],
+    ] as [$lbl, $val, $col, $sub]): ?>
+    <div style="background:#f8f9fa;border-left:3px solid <?php echo $col; ?>;border-radius:4px;padding:12px 14px">
+      <div style="font-size:24px;font-weight:700;color:<?php echo $col; ?>;line-height:1.1"><?php echo $val; ?></div>
+      <div style="font-size:12px;color:#666;margin:4px 0 3px"><?php echo $lbl; ?></div>
+      <?php echo $sub; ?>
+    </div>
+    <?php endforeach; ?>
+  </div>
+
+  <!-- Biểu đồ theo giờ -->
+  <div style="font-size:12px;color:#666;margin-bottom:6px;font-weight:600">Phân bố theo giờ</div>
+  <?php if ($today_sessions === 0): ?>
+  <p style="color:#999;font-size:13px;margin:8px 0 0">Chưa có session nào hôm nay.</p>
+  <?php else: ?>
+  <div style="display:flex;align-items:flex-end;gap:2px;height:90px;padding:0 0 4px;overflow-x:auto">
+    <?php for ($h = 0; $h <= 23; $h++):
+      $s   = $hourly[$h]['sessions'];
+      $c   = $hourly[$h]['conv'];
+      $pct = round($s / $max_h * 100);
+      $fut = $h > $now_h;
+    ?>
+    <div style="flex:1;min-width:18px;display:flex;flex-direction:column;align-items:center;gap:3px"
+         title="<?php echo sprintf('%02d:00', $h); ?> — <?php echo $s; ?> sessions, <?php echo $c; ?> chuyển đổi">
+      <div style="width:100%;height:70px;display:flex;align-items:flex-end">
+        <div style="width:100%;height:<?php echo max($s > 0 ? 3 : 0, $pct); ?>%;
+                    background:<?php echo $fut ? '#f0f0f0' : ($c > 0 ? '#00a32a' : '#2271b1'); ?>;
+                    border-radius:2px 2px 0 0;transition:height .2s"></div>
+      </div>
+      <div style="font-size:9px;color:<?php echo $h === $now_h ? '#2271b1' : '#aaa'; ?>;
+                  font-weight:<?php echo $h === $now_h ? '700' : '400'; ?>"><?php echo $h; ?></div>
+    </div>
+    <?php endfor; ?>
+  </div>
+  <div style="font-size:11px;color:#999;margin-top:4px">
+    <span style="display:inline-block;width:9px;height:9px;background:#2271b1;border-radius:2px;vertical-align:middle"></span> sessions
+    &nbsp;<span style="display:inline-block;width:9px;height:9px;background:#00a32a;border-radius:2px;vertical-align:middle"></span> giờ có chuyển đổi
+  </div>
+  <?php endif; ?>
+</div>
+
+<!-- Xu hướng theo ngày -->
+<?php if (count($daily) > 1): ?>
+<?php $max_d = 1; foreach ($daily as $r) $max_d = max($max_d, (int) $r->sessions); ?>
+<div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:18px 20px;margin-bottom:24px">
+  <h3 style="margin:0 0 14px">📈 Xu hướng theo ngày</h3>
+  <div style="display:flex;align-items:flex-end;gap:3px;height:110px;overflow-x:auto;padding-bottom:4px">
+    <?php foreach ($daily as $r):
+      $s = (int) $r->sessions; $c = (int) $r->conv;
+      $pct = round($s / $max_d * 100);
+      $is_today = $r->d === $today;
+    ?>
+    <div style="flex:1;min-width:22px;display:flex;flex-direction:column;align-items:center;gap:3px"
+         title="<?php echo date_i18n('d/m/Y', strtotime($r->d)); ?> — <?php echo $s; ?> sessions, <?php echo $c; ?> chuyển đổi">
+      <div style="font-size:10px;color:#666;font-weight:600"><?php echo $s; ?></div>
+      <div style="width:100%;height:70px;display:flex;align-items:flex-end">
+        <div style="width:100%;height:<?php echo max(3, $pct); ?>%;
+                    background:<?php echo $is_today ? '#00a32a' : '#2271b1'; ?>;
+                    border-radius:2px 2px 0 0"></div>
+      </div>
+      <div style="font-size:9px;color:#aaa;white-space:nowrap"><?php echo date_i18n('d/m', strtotime($r->d)); ?></div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
 
 <!-- Summary cards -->
 <div style="display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap">
   <?php foreach ([
-    ['Sessions', $total, '#2271b1'],
+    ['Sessions — ' . $period, $total, '#2271b1'],
     ['Chuyển đổi', $conv, '#00a32a'],
     ['Tỷ lệ conv.', $rate . '%', '#f0860a'],
   ] as [$l,$v,$c]): ?>
