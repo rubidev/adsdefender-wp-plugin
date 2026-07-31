@@ -458,7 +458,6 @@ if ($sec['total'] > 0):
 <?php endif; ?>
 
 </div>
-</div>
 <?php
 }
 
