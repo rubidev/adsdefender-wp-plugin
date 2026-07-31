@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.112
+ * Version:      2.5.113
  * Author:       AdsDefender
  * Update URI:   https://track.saigon.pro/adsdefender-update.json
  * Requires PHP: 7.4
@@ -98,6 +98,9 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.113 Nguon cap nhat chuyen tu track.saigon.pro sang GitHub: adsdefender-update.json nam
+ *          ngay trong repo, doc qua raw.githubusercontent. Khong con phai upload JSON thu cong
+ *          moi lan phat hanh. Them release.sh lam tron chuoi bump -> json -> tag -> zip -> release
  *  2.5.112 UTM & Attribution: them thong ke trong ngay — bo loc "Hom nay"/"Hom qua", 4 the so
  *          lieu (sessions, chuyen doi, ty le, gio cao diem) kem so sanh voi hom qua, bieu do
  *          phan bo theo gio 0-23, va bieu do xu huong theo ngay. Moc thoi gian dung
@@ -253,7 +256,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.112');
+define('ADSDEFENDER_VERSION',        '2.5.113');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');
@@ -267,7 +270,7 @@ define('ADSDEFENDER_CRON_HOOK',      'adsdefender_sync_cron');
 define('ADSDEFENDER_LOG_TABLE',      'adsdefender_block_log');
 define('ADSDEFENDER_OPTION_VISITORS','adsdefender_blocked_visitors');
 define('ADSDEFENDER_LOCKOUT_TABLE',  'adsdefender_lockouts');
-define('ADSDEFENDER_UPDATE_URL',     'https://track.saigon.pro/adsdefender-update.json');
+define('ADSDEFENDER_UPDATE_URL',     'https://raw.githubusercontent.com/rubidev/adsdefender-wp-plugin/main/adsdefender-update.json');
 define('ADSDEFENDER_PLUGIN_SLUG',    plugin_basename(__FILE__));
 
 require_once ADSDEFENDER_DIR . 'includes/core.php';

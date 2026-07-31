@@ -1,0 +1,9 @@
+{
+  "version": "2.5.113",
+  "download_url": "https://github.com/rubidev/adsdefender-wp-plugin/releases/download/v2.5.113/adsdefender-2.5.113.zip",
+  "details_url": "https://github.com/rubidev/adsdefender-wp-plugin/releases/tag/v2.5.113",
+  "requires": "5.6",
+  "tested": "6.8",
+  "requires_php": "7.4",
+  "changelog": " 2.5.113 Nguon cap nhat chuyen tu track.saigon.pro sang GitHub: adsdefender-update.json nam\n         ngay trong repo, doc qua raw.githubusercontent. Khong con phai upload JSON thu cong\n         moi lan phat hanh. Them release.sh lam tron chuoi bump -> json -> tag -> zip -> release\n 2.5.112 UTM & Attribution: them thong ke trong ngay — bo loc \"Hom nay\"/\"Hom qua\", 4 the so\n         lieu (sessions, chuyen doi, ty le, gio cao diem) kem so sanh voi hom qua, bieu do\n         phan bo theo gio 0-23, va bieu do xu huong theo ngay. Moc thoi gian dung\n         current_time() theo mui gio site thay vi gio UTC server\n 2.5.111 DB Scanner: snippet hien du URL. Signature ket thuc bang lookahead (?!...) khong tieu\n         thu ky tu nen $m[0] cut ngay sau \"https://\" — admin khong biet domain nao bi bao.\n         Them adsdefender_db_snippet() lay them ngu canh sau vi tri khop (4 cho).\n         Badge menu: bo class 'awaiting-mod' (cua comment cho duyet) sang 'update-plugins',\n         rut gon so >999 thanh \"999+\", chuyen badge log tu menu cha/Marketing sang Bao ve,\n         va bo badge update bi lap 2 lan (menu.php + update.php priority 999)\n 2.5.110 Them filter upgrader_source_selection: doi ten thu muc khi giai nen ZIP tu GitHub\n         (adsdefender-wp-plugin-x.y.z -> adsdefender). Khong co no, moi lan cap nhat tu\n         GitHub release se tao plugin moi thay vi ghi de ban cu"
+}
