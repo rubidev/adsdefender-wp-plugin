@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.109
+ * Version:      2.5.110
  * Author:       AdsDefender
  * Update URI:   https://track.saigon.pro/adsdefender-update.json
  * Requires PHP: 7.4
@@ -98,6 +98,9 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.110 Them filter upgrader_source_selection: doi ten thu muc khi giai nen ZIP tu GitHub
+ *          (adsdefender-wp-plugin-x.y.z -> adsdefender). Khong co no, moi lan cap nhat tu
+ *          GitHub release se tao plugin moi thay vi ghi de ban cu
  *  2.5.109 DB Scanner: them domain nhung hop le vao whitelist db_script_src (TikTok, YouTube,
  *          Facebook, Twitter/X, Vimeo, Instagram, GTM, Google Ads...) — truoc day embed.js cua
  *          TikTok trong bai viet bi bao "External script tu domain la" severity high.
@@ -240,7 +243,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.109');
+define('ADSDEFENDER_VERSION',        '2.5.110');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');

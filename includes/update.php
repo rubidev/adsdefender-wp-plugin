@@ -18,6 +18,28 @@ function adsdefender_fetch_update_info(): ?array
     return $data;
 }
 
+// ─── Đổi tên thư mục khi giải nén ────────────────────────────────────────────
+// ZIP của GitHub giải nén ra "adsdefender-wp-plugin-2.5.109/" (tên repo + tag),
+// nhưng WordPress cần đúng thư mục "adsdefender/". Không đổi tên thì mỗi lần
+// cập nhật sẽ tạo ra một plugin mới thay vì ghi đè bản cũ.
+
+add_filter('upgrader_source_selection', function ($source, $remote_source, $upgrader, $args = []) {
+    if (empty($args['plugin']) || $args['plugin'] !== ADSDEFENDER_PLUGIN_SLUG) return $source;
+
+    $desired = trailingslashit($remote_source) . 'adsdefender';
+    if (untrailingslashit($source) === $desired) return $source;
+
+    global $wp_filesystem;
+    if (!$wp_filesystem) return $source;
+
+    if ($wp_filesystem->is_dir($desired)) $wp_filesystem->delete($desired, true);
+    if (!$wp_filesystem->move($source, $desired)) {
+        return new WP_Error('adsdefender_rename_failed',
+            'Không đổi được tên thư mục plugin khi giải nén.');
+    }
+    return trailingslashit($desired);
+}, 10, 4);
+
 // ─── Inject vào WP update transient ──────────────────────────────────────────
 
 add_filter('pre_set_site_transient_update_plugins', function ($transient) {
