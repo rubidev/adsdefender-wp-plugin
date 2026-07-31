@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.103
+ * Version:      2.5.104
  * Author:       AdsDefender
  * Update URI:   https://track.saigon.pro/adsdefender-update.json
  * Requires PHP: 7.4
@@ -98,6 +98,9 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.104 Fix that: nut tel: van khong quay so tren mobile — con listener thu 2 o utm.php dung
+ *          e.target.closest() (v2.5.103 chi va contact-bar.php). Doi sang tu leo cay DOM + try/catch;
+ *          thay startsWith/includes bang indexOf va NodeList.forEach bang vong for (WebView cu)
  *  2.5.103 Contact Bar fix: nut goi khong hoat dong tren mobile (SVGElement khong co .closest()
  *          gay TypeError o capture phase, chan luon tel:); them hide_on_pages (ID/slug/path/wildcard);
  *          them current_user_can, is_array cho $_POST (fatal PHP 8); fix nut nhan ban + option phinh;
@@ -221,7 +224,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.103');
+define('ADSDEFENDER_VERSION',        '2.5.104');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');

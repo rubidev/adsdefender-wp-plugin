@@ -205,7 +205,9 @@ body{padding-bottom:calc(54px + env(safe-area-inset-bottom,0px))!important}
    ép về object để key luôn khớp với data-adcb-ev dù index có nhảy cóc. */
 var evMap = <?php echo json_encode($js_events, JSON_UNESCAPED_UNICODE | JSON_FORCE_OBJECT); ?>;
 var hasGTM = <?php echo $has_gtm ? 'true' : 'false'; ?>;
-document.querySelectorAll('[data-adcb-ev]').forEach(function(el){
+/* Duyệt bằng vòng for: NodeList.forEach không có trên WebView Android cũ. */
+var adcbEls = document.querySelectorAll('[data-adcb-ev]');
+for (var adcbI = 0; adcbI < adcbEls.length; adcbI++) (function(el){
   el.addEventListener('click', function(){
    try {
     var idx = el.getAttribute('data-adcb-ev');
@@ -247,7 +249,7 @@ document.querySelectorAll('[data-adcb-ev]').forEach(function(el){
     }
    } catch(err) {/* không để lỗi tracking chặn tel:/zalo: trên mobile */}
   });
-});
+})(adcbEls[adcbI]);
 })();
 </script>
 <?php endif; ?>
