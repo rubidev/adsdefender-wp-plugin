@@ -188,7 +188,7 @@ body{padding-bottom:calc(54px + env(safe-area-inset-bottom,0px))!important}
    style="background-color:<?php echo esc_attr($color); ?>"
    title="<?php echo esc_attr($label); ?>"
    aria-label="<?php echo esc_attr($label); ?>"
-   <?php if ($has_ev): ?>data-adcb-ev="<?php echo $idx; ?>"<?php endif; ?>>
+   <?php if ($has_ev): ?>onclick="adcbTrack(<?php echo (int) $idx; ?>)"<?php endif; ?>>
   <?php echo $icon; ?>
   <?php if ($pos === 'bottom'): ?>
   <span class="<?php echo $uid; ?>-label"><?php echo esc_html($label); ?></span>
@@ -200,106 +200,49 @@ body{padding-bottom:calc(54px + env(safe-area-inset-bottom,0px))!important}
 </div>
 <?php if (!empty($js_events)): ?>
 <script>
-(function(){
-/* JSON_FORCE_OBJECT: $js_events là mảng thưa (nút không bật conversion bị bỏ qua),
-   ép về object để key luôn khớp với data-adcb-ev dù index có nhảy cóc. */
-var evMap = <?php echo json_encode($js_events, JSON_UNESCAPED_UNICODE | JSON_FORCE_OBJECT); ?>;
-var hasGTM = <?php echo $has_gtm ? 'true' : 'false'; ?>;
-/* Duyệt bằng vòng for: NodeList.forEach không có trên WebView Android cũ. */
-var adcbEls = document.querySelectorAll('[data-adcb-ev]');
-for (var adcbI = 0; adcbI < adcbEls.length; adcbI++) (function(el){
-  el.addEventListener('click', function(){
-   try {
-    var idx = el.getAttribute('data-adcb-ev');
-    var ev  = evMap[idx];
-    if (!ev) return;
+/* Gọi từ onclick="" ngay trên thẻ <a>. Không addEventListener, không bắt click
+   toàn site: trình duyệt đã quyết định điều hướng trước khi hàm này chạy, nên
+   dù nó lỗi thì tel:/zalo: vẫn mở bình thường. */
+var adcbEv = <?php echo json_encode($js_events, JSON_UNESCAPED_UNICODE | JSON_FORCE_OBJECT); ?>;
+function adcbTrack(idx){
+ try {
+  var ev = adcbEv[idx];
+  if (!ev) return;
 
-    // 1. GTM dataLayer (GA4 sẽ nhận qua GTM tag nếu đã cấu hình)
-    if (hasGTM) {
-      window.dataLayer = window.dataLayer || [];
-      dataLayer.push({
-        event:          ev.event,
-        event_category: ev.category,
-        event_label:    ev.label,
-        contact_type:   ev.category,
-      });
-    }
-
-    // 2. GA4 direct (gtag) — luôn gửi nếu có gtag, kể cả khi dùng GTM
-    if (typeof gtag !== 'undefined') {
-      gtag('event', ev.event, {
-        event_category: ev.category,
-        event_label:    ev.label,
-      });
-    }
-
-    // 3. Google Ads conversion — luôn gửi nếu có ads_id (qua gtag trực tiếp)
-    if (ev.ads_id && ev.ads_label && typeof gtag !== 'undefined') {
-      gtag('event', 'conversion', {send_to: ev.ads_id + '/' + ev.ads_label});
-    }
-
-    // 4. Matomo / TrackSG (_paq) — dùng sg_event nếu admin đã đặt riêng
-    if (typeof _paq !== 'undefined') {
-      _paq.push(['trackEvent', 'Contact', ev.sg_event || ev.event, ev.label || ev.category]);
-    }
-
-    // 5. Meta Pixel
-    if (typeof fbq !== 'undefined') {
-      fbq('track', 'Contact', {content_category: ev.category, content_name: ev.label || ev.category});
-    }
-   } catch(err) {/* không để lỗi tracking chặn tel:/zalo: trên mobile */}
+  // 1. GTM dataLayer (GA4 nhận qua GTM tag nếu đã cấu hình)
+  <?php if ($has_gtm): ?>
+  window.dataLayer = window.dataLayer || [];
+  dataLayer.push({
+    event:          ev.event,
+    event_category: ev.category,
+    event_label:    ev.label,
+    contact_type:   ev.category
   });
-})(adcbEls[adcbI]);
-})();
+  <?php endif; ?>
+
+  // 2. GA4 direct (gtag) — luôn gửi nếu có gtag, kể cả khi dùng GTM
+  if (typeof gtag !== 'undefined') {
+    gtag('event', ev.event, {event_category: ev.category, event_label: ev.label});
+  }
+
+  // 3. Google Ads conversion
+  if (ev.ads_id && ev.ads_label && typeof gtag !== 'undefined') {
+    gtag('event', 'conversion', {send_to: ev.ads_id + '/' + ev.ads_label});
+  }
+
+  // 4. Matomo / TrackSG (_paq) — dùng sg_event nếu admin đã đặt riêng
+  if (typeof _paq !== 'undefined') {
+    _paq.push(['trackEvent', 'Contact', ev.sg_event || ev.event, ev.label || ev.category]);
+  }
+
+  // 5. Meta Pixel
+  if (typeof fbq !== 'undefined') {
+    fbq('track', 'Contact', {content_category: ev.category, content_name: ev.label || ev.category});
+  }
+ } catch(err) {}
+}
 </script>
 <?php endif; ?>
-<script>
-(function(){
-var hasGTM=<?php echo $has_gtm?'true':'false';?>;
-function adcbInlineFire(type,label){
-  /* Matomo/_paq — luôn track nếu có */
-  if(typeof _paq!=='undefined'){
-    _paq.push(['trackEvent','Contact','Click',type+':'+label]);
-  }
-  if(typeof fbq!=='undefined'){
-    fbq('track','Contact',{content_category:type,content_name:label,contact_source:'inline'});
-  }
-  /* GTM dataLayer — nếu anh dùng GTM */
-  if(hasGTM){
-    window.dataLayer=window.dataLayer||[];
-    dataLayer.push({event:'contact_click',event_category:type,event_label:label,contact_type:type,contact_source:'inline'});
-  }
-}
-/* Tự leo cây thay vì e.target.closest(): trên iOS Safari / Android WebView cũ,
-   SVGElement không có .closest() — bấm trúng icon sẽ ném TypeError, và vì
-   listener chạy ở capture phase, exception sẽ chặn luôn hành vi mặc định
-   (tel: không mở được trên mobile). */
-function adcbClosestLink(node){
-  for(var n=node; n && n!==document; n=n.parentNode||n.parentElement){
-    if(n.nodeType===1 && n.tagName && n.tagName.toLowerCase()==='a' && n.hasAttribute('href')) return n;
-  }
-  return null;
-}
-function adcbInWrap(node){
-  for(var n=node; n && n!==document; n=n.parentNode||n.parentElement){
-    if(n.nodeType===1 && n.classList && n.classList.contains('<?php echo $uid; ?>-wrap')) return true;
-  }
-  return false;
-}
-document.addEventListener('click',function(e){
-  try{
-    var a=adcbClosestLink(e.target);
-    if(!a||adcbInWrap(a))return;
-    var href=a.getAttribute('href')||'';
-    if(/^tel:/i.test(href)){
-      adcbInlineFire('phone',href.replace(/^tel:/i,'').trim());
-    }else if(/zalo\.me\//i.test(href)){
-      adcbInlineFire('zalo',(a.textContent||'').trim()||href);
-    }
-  }catch(err){/* tracking không bao giờ được chặn điều hướng */}
-},true);
-})();
-</script>
 <?php
     return ob_get_clean();
 }

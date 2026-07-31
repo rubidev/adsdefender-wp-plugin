@@ -184,38 +184,9 @@ window.adUTM = <?php echo json_encode([
     'token'    => $token,
 ], JSON_UNESCAPED_UNICODE); ?>;
 window.adUTM.restUrl = '<?php echo $rest_url; ?>';
-/* Tự leo cây thay vì e.target.closest(): trên iOS Safari / Android WebView cũ,
-   SVGElement không có .closest() — bấm trúng icon trong nút sẽ ném TypeError,
-   chặn luôn hành vi mặc định nên tel: không quay số được trên mobile.
-   Toàn bộ bọc try/catch: tracking không bao giờ được cản điều hướng. */
-function adUtmClosestLink(node){
-  for(var n=node; n && n!==document; n=n.parentNode||n.parentElement){
-    if(n.nodeType===1 && n.tagName && n.tagName.toLowerCase()==='a' && n.hasAttribute('href')) return n;
-  }
-  return null;
-}
-document.addEventListener('click', function(e){
- try {
-  var a = adUtmClosestLink(e.target);
-  if (!a || !window.adUTM.sid) return;
-  var href = a.href || '';
-  var type = '';
-  if (href.indexOf('tel:') === 0)          type = 'phone';
-  else if (href.indexOf('zalo.me') > -1)   type = 'zalo';
-  else if (href.indexOf('m.me') > -1)      type = 'messenger';
-  else if (href.indexOf('wa.me') > -1)     type = 'whatsapp';
-  else if (href.indexOf('t.me') > -1)      type = 'telegram';
-  if (!type) return;
-  if (!navigator.sendBeacon) return;
-  var blob = new Blob([JSON.stringify({
-    session_id: window.adUTM.sid,
-    type:       type,
-    label:      a.getAttribute('aria-label') || (a.innerText || '').trim().slice(0,50),
-    _ads_token: window.adUTM.token,
-  })], {type:'application/json'});
-  navigator.sendBeacon(window.adUTM.restUrl, blob);
- } catch(err){/* không để lỗi tracking chặn tel:/zalo: trên mobile */}
-});
+/* Không bắt click toàn site nữa. Listener cũ chặn hành vi mặc định của tel:
+   trên mobile — một cái <a href="tel:"> là HTML thuần, không cần JS để chạy.
+   Conversion của Contact Bar được track ngay tại nút (contact-bar.php). */
 </script>
 <?php
 }, 5);
