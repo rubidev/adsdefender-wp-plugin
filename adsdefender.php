@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.114
+ * Version:      2.5.115
  * Author:       AdsDefender
  * Update URI:   https://github.com/rubidev/adsdefender-wp-plugin
  * Requires PHP: 7.4
@@ -98,6 +98,12 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.115 File Scanner: sua 2 bao dong gia.
+ *          - mail_spam thieu neo dau tu nen "sanitize_email($_POST[...])" bi bat vi chu "mail"
+ *            nam trong "sanitize_email". Them (?<![\w$>-]) — wp_mail/is_email/->mail() deu sach
+ *          - php_in_upload bat moi <?php nen index.php "Silence is golden" cua WordPress,
+ *            WPForms, iThemes Security trong uploads/ bi cham critical. Bo qua khi noi dung
+ *            dung la stub vo hai (kiem tra theo NOI DUNG, malware nup ten index.php van bi bat)
  *  2.5.114 Cap nhat header Update URI va cac tham chieu con ghi track.saigon.pro sang GitHub
  *  2.5.113 Nguon cap nhat chuyen tu track.saigon.pro sang GitHub: adsdefender-update.json nam
  *          ngay trong repo, doc qua raw.githubusercontent. Khong con phai upload JSON thu cong
@@ -257,7 +263,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.114');
+define('ADSDEFENDER_VERSION',        '2.5.115');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');
