@@ -6,17 +6,50 @@ function adsdefender_get_contact_bar(): array
     return get_option(ADSDEFENDER_OPTION_CONTACT, [
         'enabled'        => 0,
         'position'       => 'bottom',
-        'style'          => 'bar',
         'buttons'        => [],
         'mobile_only'    => 0,
         'hide_on_pages'  => '',
     ]);
 }
 
+/**
+ * Kiểm tra trang hiện tại có nằm trong danh sách ẩn không.
+ * Nhận mỗi dòng một mục: ID bài/trang, slug, hoặc đường dẫn (/lien-he, /shop/*).
+ */
+function adsdefender_contact_is_hidden(string $rules): bool
+{
+    $rules = trim($rules);
+    if ($rules === '') return false;
+
+    $post_id = is_singular() ? (int) get_queried_object_id() : 0;
+    $slug    = $post_id ? (string) get_post_field('post_name', $post_id) : '';
+    $path    = '/' . trim(parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/', '/');
+
+    foreach (preg_split('/[\r\n,]+/', $rules) as $rule) {
+        $rule = trim($rule);
+        if ($rule === '') continue;
+
+        if (ctype_digit($rule)) {
+            if ($post_id && $post_id === (int) $rule) return true;
+            continue;
+        }
+
+        if ($rule[0] === '/') {
+            $pat = '#^' . str_replace('\*', '.*', preg_quote(rtrim($rule, '/') ?: '/', '#')) . '/?$#i';
+            if (preg_match($pat, $path)) return true;
+            continue;
+        }
+
+        if ($slug !== '' && strcasecmp($slug, ltrim($rule, '/')) === 0) return true;
+    }
+    return false;
+}
+
 add_action('wp_footer', function () {
     if (is_admin()) return;
     $cfg     = adsdefender_get_contact_bar();
     if (empty($cfg['enabled']) || empty($cfg['buttons'])) return;
+    if (adsdefender_contact_is_hidden((string) ($cfg['hide_on_pages'] ?? ''))) return;
     $buttons = array_filter($cfg['buttons'], fn($b) => !empty($b['active']) && !empty($b['value']));
     if (empty($buttons)) return;
     echo adsdefender_render_contact_bar($cfg, array_values($buttons));
@@ -28,14 +61,14 @@ function adsdefender_contact_url(string $type, string $value): string
     switch ($type) {
         case 'phone':     return 'tel:' . preg_replace('/[^0-9+]/', '', $value);
         case 'zalo':      return 'https://zalo.me/' . preg_replace('/[^0-9]/', '', $value);
-        case 'messenger': return strpos($value, 'http') === 0 ? $value : 'https://m.me/' . ltrim($value, '/');
+        case 'messenger': return strpos($value, 'http') === 0 ? esc_url_raw($value) : 'https://m.me/' . ltrim($value, '/');
         case 'whatsapp':  return 'https://wa.me/' . preg_replace('/[^0-9]/', '', $value);
         case 'viber':     return 'viber://chat?number=' . urlencode(preg_replace('/[^0-9+]/', '', $value));
         case 'telegram':  return 'https://t.me/' . ltrim($value, '@/');
         case 'tiktok':    return 'https://tiktok.com/@' . ltrim($value, '@');
         case 'email':     return 'mailto:' . $value;
-        case 'maps':      return strpos($value, 'http') === 0 ? $value : 'https://maps.google.com/?q=' . urlencode($value);
-        case 'custom':    return $value;
+        case 'maps':      return strpos($value, 'http') === 0 ? esc_url_raw($value) : 'https://maps.google.com/?q=' . urlencode($value);
+        case 'custom':    return esc_url_raw($value);
         default:          return '#';
     }
 }
@@ -60,7 +93,7 @@ function adsdefender_contact_svg(string $icon): string
 {
     $icons = [
         'phone'     => '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>',
-        'zalo'      => '<svg viewBox="0 0 64 64" fill="currentColor"><path d="M32 4C16.536 4 4 16.536 4 32s12.536 28 28 28 28-12.536 28-28S47.464 4 32 4zm12.5 38.5H20.5v-3.5l15.5-18H21v-4h23.5v3.5l-15.5 18H44.5v4z"/></svg>',
+        'zalo'      => '<svg viewBox="0 0 48 48" fill="currentColor"><path d="M24 5C12.4 5 3 13.2 3 23.3c0 5.7 3 10.8 7.8 14.2-.3 1.6-1.2 4.2-2.6 6-.4.5 0 1.2.7 1.1 3.9-.6 7-2.2 8.9-3.5 2 .5 4.1.8 6.2.8 11.6 0 21-8.2 21-18.3S35.6 5 24 5z"/><path fill="#fff" d="M14.6 17.4h9.7v2.2l-6.6 7.9h6.8v2.3H14v-2.2l6.6-7.9h-6zm12.3 0h2.4v12.4h-2.4zm8.6 3.3c2.6 0 4.7 2.1 4.7 4.7s-2.1 4.7-4.7 4.7-4.7-2.1-4.7-4.7 2.1-4.7 4.7-4.7zm0 2.2a2.5 2.5 0 100 5 2.5 2.5 0 000-5z"/></svg>',
         'messenger' => '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.145 2 11.259c0 2.88 1.397 5.451 3.584 7.151V22l3.39-1.86C10.079 20.372 11.02 20.519 12 20.519c5.523 0 10-4.145 10-9.26C22 6.145 17.523 2 12 2zm1.009 12.467l-2.552-2.72-4.98 2.72 5.477-5.812 2.614 2.72 4.918-2.72-5.477 5.812z"/></svg>',
         'whatsapp'  => '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>',
         'viber'     => '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.4 1.9C8.8 2 6.2 2.9 4.2 4.6 2.3 6.3 1.1 8.7 1 11.2c-.1 2 .4 4 1.5 5.7v3.4c0 .4.4.7.7.6l3.2-.9c1.5.7 3.1 1.1 4.7 1.1h.5c2.4-.1 4.7-1 6.4-2.8 1.8-1.7 2.8-4.1 2.9-6.5.1-2.5-.8-5-2.6-6.8-1.7-1.8-4.1-2.9-6.9-3.1zM8.1 7.1c.2 0 .4.1.5.2l1.4 1.7c.2.3.2.7 0 1l-.7.8c.4.8 1.5 2 2.4 2.5l.9-.7c.3-.2.7-.2 1 0l1.7 1.3c.3.2.3.6.1.9l-.5.7c-.4.5-.8.8-1.4.9-.8.1-2.4-.3-4.5-2.5-1.8-1.8-2.3-3.3-2.2-4.1.1-.5.4-.9.8-1.3l.6-.5c.1 0 .2-.1.3-.1h-.4z"/></svg>',
@@ -80,7 +113,6 @@ function adsdefender_render_contact_bar(array $cfg, array $buttons): string
     $uid     = 'adcb';
     $tr      = adsdefender_get_tracking_settings();
     $has_gtm = !empty($tr['gtm_id']);
-    $has_sg  = !empty($tr['tracksg_id']);
 
     $js_events = [];
     foreach ($buttons as $idx => $btn) {
@@ -109,12 +141,21 @@ function adsdefender_render_contact_bar(array $cfg, array $buttons): string
 <?php if ($pos === 'bottom'): ?>
 .<?php echo $uid; ?>-wrap{flex-direction:row;box-shadow:0 -2px 16px rgba(0,0,0,.18);border-top:1px solid rgba(255,255,255,.08)}
 .<?php echo $uid; ?>-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:0;height:54px;color:#fff!important;text-decoration:none!important;font-size:12.5px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;transition:filter .15s,transform .15s;line-height:1;letter-spacing:.2px;position:relative;overflow:hidden}
-.<?php echo $uid; ?>-btn::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,0);transition:background .15s}
+.<?php echo $uid; ?>-btn::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,0);transition:background .15s;pointer-events:none}
 .<?php echo $uid; ?>-btn:hover::after{background:rgba(255,255,255,.12)}
 .<?php echo $uid; ?>-btn:active::after{background:rgba(0,0,0,.1)}
 .<?php echo $uid; ?>-btn:first-child{border-radius:0}
-.<?php echo $uid; ?>-btn svg{width:20px;height:20px;flex-shrink:0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25))}
-.<?php echo $uid; ?>-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.3)}
+.<?php echo $uid; ?>-btn svg{width:20px;height:20px;flex-shrink:0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));pointer-events:none}
+.<?php echo $uid; ?>-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.3);pointer-events:none}
+/* Chừa chỗ để bar không che nội dung cuối trang; env() cộng thêm safe-area iPhone. */
+.<?php echo $uid; ?>-wrap{padding-bottom:env(safe-area-inset-bottom,0)}
+<?php if ($mob_only): ?>
+@media(max-width:768px){body{padding-bottom:calc(54px + env(safe-area-inset-bottom,0px))!important}}
+@media(max-width:500px){body{padding-bottom:calc(52px + env(safe-area-inset-bottom,0px))!important}}
+<?php else: ?>
+body{padding-bottom:calc(54px + env(safe-area-inset-bottom,0px))!important}
+@media(max-width:500px){body{padding-bottom:calc(52px + env(safe-area-inset-bottom,0px))!important}}
+<?php endif; ?>
 @media(max-width:500px){.<?php echo $uid; ?>-label{display:none}.<?php echo $uid; ?>-btn{height:52px}}
 <?php else: ?>
 .<?php echo $uid; ?>-wrap{flex-direction:column;gap:10px;padding:10px}
@@ -122,7 +163,7 @@ function adsdefender_render_contact_bar(array $cfg, array $buttons): string
 .<?php echo $uid; ?>-btn:first-child{animation:<?php echo $uid; ?>-pulse 2.2s ease-in-out infinite}
 .<?php echo $uid; ?>-btn:hover{transform:scale(1.12);box-shadow:0 8px 24px rgba(0,0,0,.32),0 2px 6px rgba(0,0,0,.18)}
 .<?php echo $uid; ?>-btn:active{transform:scale(.96)}
-.<?php echo $uid; ?>-btn svg{width:26px;height:26px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25))}
+.<?php echo $uid; ?>-btn svg{width:26px;height:26px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25));pointer-events:none}
 .<?php echo $uid; ?>-tip{position:absolute;<?php echo $tip_side; ?>;top:50%;transform:translateY(-50%);background:rgba(30,30,30,.92);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);color:#fff;font-size:12px;font-weight:700;padding:5px 11px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.2px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .<?php echo $uid; ?>-tip::before{content:'';position:absolute;top:50%;<?php echo $pos === 'left' ? 'right:100%;border-right:none;border-left:5px solid rgba(30,30,30,.92)' : 'left:100%;border-left:none;border-right:5px solid rgba(30,30,30,.92)'; ?>;transform:translateY(-50%);border-top:5px solid transparent;border-bottom:5px solid transparent}
 .<?php echo $uid; ?>-btn:hover .<?php echo $uid; ?>-tip{opacity:1;transform:translateY(-50%) translateX(<?php echo $pos === 'left' ? '2px' : '-2px'; ?>)}
@@ -160,11 +201,13 @@ function adsdefender_render_contact_bar(array $cfg, array $buttons): string
 <?php if (!empty($js_events)): ?>
 <script>
 (function(){
-var evMap = <?php echo json_encode($js_events, JSON_UNESCAPED_UNICODE); ?>;
+/* JSON_FORCE_OBJECT: $js_events là mảng thưa (nút không bật conversion bị bỏ qua),
+   ép về object để key luôn khớp với data-adcb-ev dù index có nhảy cóc. */
+var evMap = <?php echo json_encode($js_events, JSON_UNESCAPED_UNICODE | JSON_FORCE_OBJECT); ?>;
 var hasGTM = <?php echo $has_gtm ? 'true' : 'false'; ?>;
-var hasSG  = <?php echo $has_sg  ? 'true' : 'false'; ?>;
 document.querySelectorAll('[data-adcb-ev]').forEach(function(el){
   el.addEventListener('click', function(){
+   try {
     var idx = el.getAttribute('data-adcb-ev');
     var ev  = evMap[idx];
     if (!ev) return;
@@ -193,15 +236,16 @@ document.querySelectorAll('[data-adcb-ev]').forEach(function(el){
       gtag('event', 'conversion', {send_to: ev.ads_id + '/' + ev.ads_label});
     }
 
-    // 4. Matomo / TrackSG (_paq)
+    // 4. Matomo / TrackSG (_paq) — dùng sg_event nếu admin đã đặt riêng
     if (typeof _paq !== 'undefined') {
-      _paq.push(['trackEvent', 'Contact', ev.event, ev.label || ev.category]);
+      _paq.push(['trackEvent', 'Contact', ev.sg_event || ev.event, ev.label || ev.category]);
     }
 
     // 5. Meta Pixel
     if (typeof fbq !== 'undefined') {
       fbq('track', 'Contact', {content_category: ev.category, content_name: ev.label || ev.category});
     }
+   } catch(err) {/* không để lỗi tracking chặn tel:/zalo: trên mobile */}
   });
 });
 })();
@@ -224,15 +268,33 @@ function adcbInlineFire(type,label){
     dataLayer.push({event:'contact_click',event_category:type,event_label:label,contact_type:type,contact_source:'inline'});
   }
 }
-document.addEventListener('click',function(e){
-  var a=e.target.closest('a[href]');
-  if(!a||a.closest('.adcb-wrap'))return;
-  var href=a.getAttribute('href')||'';
-  if(/^tel:/i.test(href)){
-    adcbInlineFire('phone',href.replace(/^tel:/i,'').trim());
-  }else if(/zalo\.me\//i.test(href)){
-    adcbInlineFire('zalo',a.textContent.trim()||href);
+/* Tự leo cây thay vì e.target.closest(): trên iOS Safari / Android WebView cũ,
+   SVGElement không có .closest() — bấm trúng icon sẽ ném TypeError, và vì
+   listener chạy ở capture phase, exception sẽ chặn luôn hành vi mặc định
+   (tel: không mở được trên mobile). */
+function adcbClosestLink(node){
+  for(var n=node; n && n!==document; n=n.parentNode||n.parentElement){
+    if(n.nodeType===1 && n.tagName && n.tagName.toLowerCase()==='a' && n.hasAttribute('href')) return n;
   }
+  return null;
+}
+function adcbInWrap(node){
+  for(var n=node; n && n!==document; n=n.parentNode||n.parentElement){
+    if(n.nodeType===1 && n.classList && n.classList.contains('<?php echo $uid; ?>-wrap')) return true;
+  }
+  return false;
+}
+document.addEventListener('click',function(e){
+  try{
+    var a=adcbClosestLink(e.target);
+    if(!a||adcbInWrap(a))return;
+    var href=a.getAttribute('href')||'';
+    if(/^tel:/i.test(href)){
+      adcbInlineFire('phone',href.replace(/^tel:/i,'').trim());
+    }else if(/zalo\.me\//i.test(href)){
+      adcbInlineFire('zalo',(a.textContent||'').trim()||href);
+    }
+  }catch(err){/* tracking không bao giờ được chặn điều hướng */}
 },true);
 })();
 </script>
@@ -248,19 +310,40 @@ function adsdefender_page_contact()
     $defaults = adsdefender_contact_defaults();
     $types    = array_keys($defaults);
 
-    if (isset($_POST['adsdefender_save_contact']) && check_admin_referer('adsdefender_contact')) {
+    if (isset($_POST['adsdefender_save_contact'])
+        && check_admin_referer('adsdefender_contact')
+        && current_user_can('manage_options')) {
+
         $buttons  = [];
         $raw_btns = $_POST['cb_btn'] ?? [];
-        foreach ($raw_btns as $i => $b) {
+        if (!is_array($raw_btns)) $raw_btns = [];
+
+        foreach ($raw_btns as $b) {
+            if (!is_array($b)) continue;
+
             $type = sanitize_key($b['type'] ?? 'custom');
-            if (!in_array($type, $types)) $type = 'custom';
+            if (!in_array($type, $types, true)) $type = 'custom';
+
+            $value = sanitize_text_field($b['value'] ?? '');
+            $active = !empty($b['active']) ? 1 : 0;
+
             $conv_raw = $b['conversion'] ?? [];
+            if (!is_array($conv_raw)) $conv_raw = [];
+
+            // Không lưu nút rỗng và chưa bật — tránh option phình thêm 10 dòng mỗi lần lưu.
+            if ($value === '' && !$active) continue;
+
+            $color = (string) ($b['color'] ?? '');
+            if (!preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/', $color)) {
+                $color = $defaults[$type]['color'] ?? '#333';
+            }
+
             $buttons[] = [
                 'type'   => $type,
-                'value'  => sanitize_text_field($b['value'] ?? ''),
+                'value'  => $value,
                 'label'  => sanitize_text_field($b['label'] ?? ''),
-                'color'  => preg_match('/^#[0-9a-fA-F]{3,6}$/', $b['color'] ?? '') ? $b['color'] : ($defaults[$type]['color'] ?? '#333'),
-                'active' => !empty($b['active']) ? 1 : 0,
+                'color'  => $color,
+                'active' => $active,
                 'conversion' => [
                     'enabled'    => !empty($conv_raw['enabled']) ? 1 : 0,
                     'event_name' => sanitize_key($conv_raw['event_name'] ?? 'contact_click'),
@@ -272,12 +355,13 @@ function adsdefender_page_contact()
                 ],
             ];
         }
+
         $cfg = [
-            'enabled'     => !empty($_POST['cb_enabled'])     ? 1 : 0,
-            'position'    => in_array($_POST['cb_position'] ?? '', ['bottom','left','right']) ? $_POST['cb_position'] : 'bottom',
-            'style'       => 'bar',
-            'mobile_only' => !empty($_POST['cb_mobile_only']) ? 1 : 0,
-            'buttons'     => $buttons,
+            'enabled'       => !empty($_POST['cb_enabled'])     ? 1 : 0,
+            'position'      => in_array($_POST['cb_position'] ?? '', ['bottom','left','right'], true) ? $_POST['cb_position'] : 'bottom',
+            'mobile_only'   => !empty($_POST['cb_mobile_only']) ? 1 : 0,
+            'hide_on_pages' => sanitize_textarea_field(is_string($_POST['cb_hide_on_pages'] ?? '') ? $_POST['cb_hide_on_pages'] : ''),
+            'buttons'       => $buttons,
         ];
         update_option(ADSDEFENDER_OPTION_CONTACT, $cfg, false);
         echo '<div class="notice notice-success is-dismissible"><p>✅ Đã lưu Contact Bar.</p></div>';
@@ -317,6 +401,20 @@ function adsdefender_page_contact()
   <td><label><input type="checkbox" name="cb_mobile_only" value="1" <?php checked($cfg['mobile_only'] ?? 0, 1); ?>>
   Chỉ hiện trên mobile (≤768px)</label></td>
 </tr>
+<tr>
+  <th>Ẩn trên trang</th>
+  <td>
+    <textarea name="cb_hide_on_pages" rows="4" class="large-text code"
+      placeholder="lien-he&#10;/gio-hang&#10;/shop/*&#10;123"><?php echo esc_textarea($cfg['hide_on_pages'] ?? ''); ?></textarea>
+    <p class="description" style="margin-top:6px">
+      Mỗi dòng một mục — để trống nghĩa là hiện ở mọi trang. Chấp nhận:<br>
+      • <code>lien-he</code> — slug bài/trang<br>
+      • <code>/gio-hang</code> — đường dẫn (bắt đầu bằng <code>/</code>)<br>
+      • <code>/shop/*</code> — đường dẫn có wildcard<br>
+      • <code>123</code> — ID bài/trang
+    </p>
+  </td>
+</tr>
 </table>
 </div>
 
@@ -326,10 +424,12 @@ function adsdefender_page_contact()
 
 <div id="adcb-list" style="display:flex;flex-direction:column;gap:12px;max-width:760px">
 <?php
-$saved_types = array_column($buttons, 'type');
+/* Chỉ bổ sung dòng trống cho loại CHƯA có nút nào dùng. Kết hợp với việc
+   không lưu nút rỗng-và-tắt ở khối save, danh sách không còn phình mỗi lần lưu. */
+$saved_types = array_unique(array_column($buttons, 'type'));
 $all_buttons = $buttons;
 foreach ($defaults as $type => $def) {
-    if (!in_array($type, $saved_types)) {
+    if (!in_array($type, $saved_types, true)) {
         $all_buttons[] = ['type' => $type, 'value' => '', 'label' => '', 'color' => $def['color'], 'active' => 0];
     }
 }
