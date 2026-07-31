@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.110
+ * Version:      2.5.111
  * Author:       AdsDefender
  * Update URI:   https://track.saigon.pro/adsdefender-update.json
  * Requires PHP: 7.4
@@ -98,6 +98,12 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.111 DB Scanner: snippet hien du URL. Signature ket thuc bang lookahead (?!...) khong tieu
+ *          thu ky tu nen $m[0] cut ngay sau "https://" — admin khong biet domain nao bi bao.
+ *          Them adsdefender_db_snippet() lay them ngu canh sau vi tri khop (4 cho).
+ *          Badge menu: bo class 'awaiting-mod' (cua comment cho duyet) sang 'update-plugins',
+ *          rut gon so >999 thanh "999+", chuyen badge log tu menu cha/Marketing sang Bao ve,
+ *          va bo badge update bi lap 2 lan (menu.php + update.php priority 999)
  *  2.5.110 Them filter upgrader_source_selection: doi ten thu muc khi giai nen ZIP tu GitHub
  *          (adsdefender-wp-plugin-x.y.z -> adsdefender). Khong co no, moi lan cap nhat tu
  *          GitHub release se tao plugin moi thay vi ghi de ban cu
@@ -243,7 +249,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.110');
+define('ADSDEFENDER_VERSION',        '2.5.111');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');

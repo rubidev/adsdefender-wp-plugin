@@ -3,20 +3,32 @@ if (!defined('ABSPATH')) exit;
 
 // ─── Admin Menu ───────────────────────────────────────────────────────────────
 
+/**
+ * Badge số cho menu. Dùng class 'update-plugins' của WordPress — 'awaiting-mod'
+ * là class dành riêng cho comment chờ duyệt, gắn vào đây sẽ sai ngữ nghĩa.
+ * Số lớn rút gọn thành "999+" để badge không kéo dãn menu.
+ */
+function adsdefender_menu_badge(int $n): string
+{
+    if ($n < 1) return '';
+    $label = $n > 999 ? '999+' : (string) $n;
+    return " <span class='update-plugins count-{$n}'><span class='update-count'>{$label}</span></span>";
+}
+
 add_action('admin_menu', function () {
-    $log_bubble = adsdefender_unread_log_count();
-    $log_badge  = $log_bubble ? " <span class='awaiting-mod'>{$log_bubble}</span>" : '';
+    $log_badge = adsdefender_menu_badge(adsdefender_unread_log_count());
 
     $remote    = adsdefender_fetch_update_info();
     $has_upd   = $remote && version_compare($remote['version'] ?? '0', ADSDEFENDER_VERSION, '>');
-    $upd_badge = $has_upd ? " <span class='update-plugins count-1'><span class='update-count'>1</span></span>" : '';
+    $upd_badge = $has_upd ? adsdefender_menu_badge(1) : '';
 
-    add_menu_page('AdsDefender', 'AdsDefender' . $log_badge . $upd_badge,
+    // Menu cha: chỉ báo cập nhật. Log block thuộc về "Bảo vệ", không phải toàn plugin.
+    add_menu_page('AdsDefender', 'AdsDefender' . $upd_badge,
         'manage_options', 'adsdefender', 'adsdefender_page_dashboard', 'dashicons-shield', 80);
 
     add_submenu_page('adsdefender', 'Tổng quan',  '📊 Tổng quan',               'manage_options', 'adsdefender',          'adsdefender_page_dashboard');
-    add_submenu_page('adsdefender', 'Marketing',   '🚀 Marketing' . $log_badge,  'manage_options', 'adsdefender-marketing', 'adsdefender_page_marketing');
-    add_submenu_page('adsdefender', 'Bảo vệ',      '🛡 Bảo vệ',                  'manage_options', 'adsdefender-protect',   'adsdefender_page_protect');
+    add_submenu_page('adsdefender', 'Marketing',   '🚀 Marketing',              'manage_options', 'adsdefender-marketing', 'adsdefender_page_marketing');
+    add_submenu_page('adsdefender', 'Bảo vệ',      '🛡 Bảo vệ' . $log_badge,     'manage_options', 'adsdefender-protect',   'adsdefender_page_protect');
     add_submenu_page('adsdefender', 'Hệ thống',    '⚙️ Hệ thống' . $upd_badge,   'manage_options', 'adsdefender-system',    'adsdefender_page_system');
 });
 
@@ -500,8 +512,7 @@ function adsdefender_page_protect()
         'manual'    => '✋ Block Thủ Công',
         'whitelist' => '✅ Whitelist',
     ];
-    $log_bubble = adsdefender_unread_log_count();
-    if ($log_bubble) $tabs['log'] .= " <span class='awaiting-mod'>{$log_bubble}</span>";
+    $tabs['log'] .= adsdefender_menu_badge(adsdefender_unread_log_count());
 
     echo '<div class="wrap"><h1>🛡 AdsDefender — Bảo vệ</h1>';
     echo '<nav class="nav-tab-wrapper" style="margin-bottom:20px">';
@@ -534,7 +545,7 @@ function adsdefender_page_system()
         'filemonitor' => '🔍 File Monitor',
         'sitescanner' => '🦠 Site Scanner',
         'access'      => '🔑 Phân quyền',
-        'update'      => '⬆️ Cập nhật' . ($has_upd ? " <span class='update-plugins count-1'><span class='update-count'>1</span></span>" : ''),
+        'update'      => '⬆️ Cập nhật' . ($has_upd ? adsdefender_menu_badge(1) : ''),
     ];
     echo '<div class="wrap"><h1>⚙️ AdsDefender — Hệ thống</h1>';
     echo '<nav class="nav-tab-wrapper" style="margin-bottom:20px">';

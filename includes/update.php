@@ -196,17 +196,6 @@ add_filter('auto_update_plugin', function ($update, $item) {
 }, 10, 2);
 
 // ─── Badge update count trong admin menu ─────────────────────────────────────
-
-add_action('admin_menu', function () {
-    $data = adsdefender_fetch_update_info();
-    if (!$data) return;
-    if (!version_compare($data['version'], ADSDEFENDER_VERSION, '>')) return;
-
-    global $menu;
-    foreach ($menu as &$item) {
-        if (isset($item[2]) && $item[2] === 'adsdefender') {
-            $item[0] .= ' <span class="update-plugins count-1"><span class="update-count">1</span></span>';
-            break;
-        }
-    }
-}, 999);
+// Badge được gắn thẳng vào tiêu đề menu trong admin/menu.php (adsdefender_menu_badge).
+// Trước đây chỗ này cộng thêm một badge nữa ở priority 999 → hiện hai badge "1"
+// cạnh nhau khi có bản mới.
