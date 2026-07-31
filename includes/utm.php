@@ -164,6 +164,54 @@ add_action('rest_api_init', function () {
     ]);
 });
 
+// ─── Đếm click link liên hệ trong nội dung ────────────────────────────────────
+
+/**
+ * Chèn onclick vào các link tel:/zalo.me/m.me/wa.me/t.me trong nội dung.
+ *
+ * Xử lý ở PHP nên trình duyệt nhận về HTML đã hoàn chỉnh — không có listener
+ * nào đứng giữa cú bấm và hành vi mặc định. onclick chạy sau khi trình duyệt
+ * đã quyết định điều hướng, nên dù adContactHit() lỗi thì tel: vẫn quay số.
+ *
+ * Link đã có onclick sẵn (nút Contact Bar) được bỏ qua để khỏi đếm trùng.
+ */
+function adsdefender_inject_contact_onclick($html)
+{
+    if (!is_string($html) || $html === '' || is_admin()) return $html;
+    if (stripos($html, '<a ') === false) return $html;
+
+    return preg_replace_callback(
+        '#<a\s([^>]*?)href=(["\'])\s*(tel:[^"\']*|https?://(?:[^"\'/]*\.)?(?:zalo\.me|m\.me|wa\.me|t\.me)(?:[/?][^"\']*)?)\2([^>]*)>#i',
+        function ($m) {
+            $before = $m[1];
+            $after  = $m[4];
+
+            // Đã có onclick (nút Contact Bar) → không đụng vào, tránh đếm trùng.
+            if (stripos($before . $after, 'onclick') !== false) return $m[0];
+
+            $href = trim($m[3]);
+            $low  = strtolower($href);
+            if (strpos($low, 'tel:') === 0)          $type = 'phone';
+            elseif (strpos($low, 'zalo.me') !== false) $type = 'zalo';
+            elseif (strpos($low, 'm.me')    !== false) $type = 'messenger';
+            elseif (strpos($low, 'wa.me')   !== false) $type = 'whatsapp';
+            else                                       $type = 'telegram';
+
+            // esc_js cho ngữ cảnh JS, esc_attr cho ngữ cảnh thuộc tính HTML.
+            $val = esc_attr(esc_js(substr($href, 0, 60)));
+
+            return '<a ' . $before . 'href=' . $m[2] . $m[3] . $m[2]
+                 . ' onclick="adContactHit(&#39;' . $type . '&#39;,&#39;' . $val . '&#39;)"'
+                 . $after . '>';
+        },
+        $html
+    );
+}
+
+add_filter('the_content',  'adsdefender_inject_contact_onclick', 20);
+add_filter('widget_text',  'adsdefender_inject_contact_onclick', 20);
+add_filter('render_block', 'adsdefender_inject_contact_onclick', 20);
+
 // ─── Frontend: inject UTM JS + conversion tracking ────────────────────────────
 
 add_action('wp_footer', function () {
@@ -184,9 +232,43 @@ window.adUTM = <?php echo json_encode([
     'token'    => $token,
 ], JSON_UNESCAPED_UNICODE); ?>;
 window.adUTM.restUrl = '<?php echo $rest_url; ?>';
-/* Không bắt click toàn site nữa. Listener cũ chặn hành vi mặc định của tel:
-   trên mobile — một cái <a href="tel:"> là HTML thuần, không cần JS để chạy.
-   Conversion của Contact Bar được track ngay tại nút (contact-bar.php). */
+/* Gọi từ onclick="" mà PHP đã chèn sẵn vào link tel:/zalo trong nội dung
+   (adsdefender_inject_contact_onclick). Không addEventListener, không bắt
+   click toàn site: trình duyệt đã quyết định điều hướng trước khi hàm này
+   chạy, nên dù nó lỗi thì tel:/zalo: vẫn mở bình thường. */
+function adContactHit(type, label){
+ try {
+  if (!window.adUTM || !window.adUTM.sid) return;
+
+  /* Matomo / TrackSG */
+  if (typeof _paq !== 'undefined') {
+    _paq.push(['trackEvent', 'Contact', 'Click', type + ':' + label]);
+  }
+  /* Meta Pixel */
+  if (typeof fbq !== 'undefined') {
+    fbq('track', 'Contact', {content_category: type, content_name: label});
+  }
+  /* GA4 */
+  if (typeof gtag !== 'undefined') {
+    gtag('event', 'contact_click', {event_category: type, event_label: label});
+  }
+  /* GTM dataLayer */
+  <?php if (!empty(adsdefender_get_tracking_settings()['gtm_id'])): ?>
+  window.dataLayer = window.dataLayer || [];
+  dataLayer.push({event:'contact_click', event_category:type, event_label:label, contact_type:type});
+  <?php endif; ?>
+
+  /* Ghi vào bảng UTM để gán chuyển đổi cho phiên (attribution) */
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(window.adUTM.restUrl, new Blob([JSON.stringify({
+      session_id: window.adUTM.sid,
+      type:       type,
+      label:      label,
+      _ads_token: window.adUTM.token
+    })], {type:'application/json'}));
+  }
+ } catch(err) {}
+}
 </script>
 <?php
 }, 5);

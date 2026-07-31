@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.105
+ * Version:      2.5.106
  * Author:       AdsDefender
  * Update URI:   https://track.saigon.pro/adsdefender-update.json
  * Requires PHP: 7.4
@@ -98,6 +98,10 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.106 Dem lai click link tel:/zalo/m.me/wa.me/t.me trong bai viet + widget + block, nhung
+ *          chen onclick tu PHP (the_content/widget_text/render_block) thay vi listener JS —
+ *          HTML tra ve da hoan chinh, khong co gi dung giua cu bam va hanh vi mac dinh.
+ *          Bo qua link da co onclick (nut Contact Bar) de khong dem trung
  *  2.5.105 Bo hoan toan JS bat click toan site (utm.php + contact-bar.php). Nut tel: tro ve HTML
  *          thuan — khong JS nao chan duoc dieu huong nua. Conversion Contact Bar chuyen sang
  *          onclick="adcbTrack(i)" ngay tren the <a>, chay sau khi trinh duyet da dieu huong.
@@ -228,7 +232,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.105');
+define('ADSDEFENDER_VERSION',        '2.5.106');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');
