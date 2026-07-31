@@ -3,9 +3,9 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.113
+ * Version:      2.5.114
  * Author:       AdsDefender
- * Update URI:   https://track.saigon.pro/adsdefender-update.json
+ * Update URI:   https://github.com/rubidev/adsdefender-wp-plugin
  * Requires PHP: 7.4
  *
  * ════════════════════════════════════════════════════════════════════════════════
@@ -57,7 +57,7 @@
  *
  *  🔄  TỰ ĐỘNG CẬP NHẬT
  *      • Hiển thị badge update trong WordPress admin khi có phiên bản mới
- *      • Cập nhật 1-click từ track.saigon.pro — không cần vào WP.org
+ *      • Cập nhật 1-click từ GitHub release — không cần vào WP.org
  *
  * ════════════════════════════════════════════════════════════════════════════════
  *  CÀI ĐẶT
@@ -90,7 +90,7 @@
  *    contact-bar.php        — Contact bar front-end & admin
  *    popup.php              — Popup & lead capture front-end & admin
  *    utm.php                — UTM tracking & attribution
- *    update.php             — Auto-update via track.saigon.pro
+ *    update.php             — Auto-update via GitHub release
  *  admin/
  *    menu.php               — Admin menu: Dashboard, Marketing, Bảo vệ, Hệ thống
  *
@@ -98,6 +98,7 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.114 Cap nhat header Update URI va cac tham chieu con ghi track.saigon.pro sang GitHub
  *  2.5.113 Nguon cap nhat chuyen tu track.saigon.pro sang GitHub: adsdefender-update.json nam
  *          ngay trong repo, doc qua raw.githubusercontent. Khong con phai upload JSON thu cong
  *          moi lan phat hanh. Them release.sh lam tron chuoi bump -> json -> tag -> zip -> release
@@ -256,7 +257,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.113');
+define('ADSDEFENDER_VERSION',        '2.5.114');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');

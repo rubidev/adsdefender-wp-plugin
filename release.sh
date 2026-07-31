@@ -87,7 +87,7 @@ z = zipfile.ZipFile(sys.argv[1]); n = z.namelist()
 assert all('\\' not in x for x in n), 'ZIP có backslash'
 assert 'adsdefender/adsdefender.php' in n, 'thiếu file chính'
 assert z.testzip() is None, 'ZIP hỏng'
-print('   ZIP OK — %d mục' % len(n))
+print('   ZIP OK - %d entries' % len(n))
 PYEOF
 
 # ── 5. Tạo GitHub release ────────────────────────────────────────────────────
