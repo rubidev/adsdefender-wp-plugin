@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.108
+ * Version:      2.5.109
  * Author:       AdsDefender
  * Update URI:   https://track.saigon.pro/adsdefender-update.json
  * Requires PHP: 7.4
@@ -98,6 +98,10 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.109 DB Scanner: them domain nhung hop le vao whitelist db_script_src (TikTok, YouTube,
+ *          Facebook, Twitter/X, Vimeo, Instagram, GTM, Google Ads...) — truoc day embed.js cua
+ *          TikTok trong bai viet bi bao "External script tu domain la" severity high.
+ *          Kem theo va lo hong co san: whitelist thieu neo cuoi nen tiktok.com.evil.net lot luoi
  *  2.5.108 Fix cau truc HTML admin: trang Dashboard thua mot the </div> (dong 461) lam dong som
  *          #wpwrap, day #wpfooter ra ngoai container — footer admin hien thi sai vi tri
  *  2.5.107 Bo doan JS an notice "Cam on ban da khoi tao voi WordPress" tren trang AdsDefender —
@@ -236,7 +240,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.108');
+define('ADSDEFENDER_VERSION',        '2.5.109');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');
