@@ -65,17 +65,6 @@ function adsdefender_set_manager_user(int $new_uid): void
     }
 }
 
-// Ẩn WP 7.0 "Cảm ơn bạn đã khởi tạo với WordPress" notice trên trang AdsDefender
-add_action('admin_notices', function () {
-    $page = $_GET['page'] ?? '';
-    if (strpos($page, 'adsdefender') !== 0) return;
-    // JS: tìm và xóa đúng notice chứa text đó — không ảnh hưởng notice khác
-    echo '<script>document.addEventListener("DOMContentLoaded",function(){'
-        . 'document.querySelectorAll(".notice,.notice-info,.updated").forEach(function(el){'
-        . 'if(el.textContent.indexOf("WordPress")>-1&&el.textContent.indexOf("khởi tạo")>-1){'
-        . 'el.style.display="none";}});});</script>';
-}, 1);
-
 add_action('admin_init', function () {
     register_setting('adsdefender', 'adsdefender_settings', [
         'sanitize_callback' => 'adsdefender_sanitize_settings',

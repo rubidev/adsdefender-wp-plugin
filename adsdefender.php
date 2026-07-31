@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.106
+ * Version:      2.5.107
  * Author:       AdsDefender
  * Update URI:   https://track.saigon.pro/adsdefender-update.json
  * Requires PHP: 7.4
@@ -98,6 +98,8 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.107 Bo doan JS an notice "Cam on ban da khoi tao voi WordPress" tren trang AdsDefender —
+ *          chi khop tieng Viet, dung NodeList.forEach, va co the an nham notice plugin khac
  *  2.5.106 Dem lai click link tel:/zalo/m.me/wa.me/t.me trong bai viet + widget + block, nhung
  *          chen onclick tu PHP (the_content/widget_text/render_block) thay vi listener JS —
  *          HTML tra ve da hoan chinh, khong co gi dung giua cu bam va hanh vi mac dinh.
@@ -232,7 +234,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.106');
+define('ADSDEFENDER_VERSION',        '2.5.107');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');
