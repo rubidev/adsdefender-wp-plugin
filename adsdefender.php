@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.118
+ * Version:      2.5.119
  * Author:       AdsDefender
  * Update URI:   https://github.com/rubidev/adsdefender-wp-plugin
  * Requires PHP: 7.4
@@ -98,6 +98,20 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.119 Sua 2 signature bao dong gia (bat oan plugin hop phap):
+ *          - hidden_spam_div bat MOI <div style="display:none"> nen wpforms, litespeed-cache,
+ *            freemius debug templates deu bi cham high. Div an la chuyen binh thuong (modal,
+ *            template cho render). Nay chi bao khi ben trong div an co THE LINK RA NGOAI —
+ *            dung dac trung SEO injection (giau backlink cho bot doc)
+ *          - eval_var ha tu 'high' xuong 'medium' va bo qua ten bien ro nghia an toan
+ *            ($safe_code, $code, $template...). Backdoor that gan nhu luon kem base64/gzinflate/
+ *            $_POST va da co signature rieng bat; eval($var) mot minh khong du de ket luan
+ *          Them TU DONG TOI UU wp-config.php (nut moi trong trang Malware Scanner):
+ *          - Dat WP_DEBUG_DISPLAY=false, WP_DEBUG_LOG=true, DISALLOW_FILE_EDIT=true,
+ *            WP_AUTO_UPDATE_CORE='minor'; don ky tu thua sau the dong PHP
+ *          - An toan: xem truoc thay doi va hoi xac nhan, sao luu truoc khi ghi, kiem tra cu
+ *            phap ban moi TRUOC khi thay the, doc lai kiem tra lan nua, hong thi khoi phuc ngay
+ *          - Khong bao gio tu dong doi salt keys (se dang xuat toan bo nguoi dung)
  *  2.5.118 Malware Scanner: sua loi "Loi ket noi khi quet Plugins".
  *          - RecursiveIteratorIterator nem UnexpectedValueException tu getChildren() GIUA vong
  *            lap khi gap thu muc khong doc duoc (hay gap tren shared hosting o wp-content/plugins).
@@ -291,7 +305,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.118');
+define('ADSDEFENDER_VERSION',        '2.5.119');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');

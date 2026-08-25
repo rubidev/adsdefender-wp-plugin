@@ -3122,10 +3122,15 @@ function adsdefender_page_sitescanner(): void
         <button id="sc-btn-scan" class="button button-primary" data-nonce="<?php echo esc_attr($nonce_run); ?>">
             🦠 Quét malware ngay
         </button>
+        <button id="sc-btn-optimize" class="button" data-nonce="<?php echo esc_attr(wp_create_nonce('adsdefender_cfg_optimize')); ?>"
+                title="Đặt các hằng số bảo mật nên có trong wp-config.php — có sao lưu và kiểm tra cú pháp trước khi ghi">
+            ⚙️ Tối ưu wp-config.php
+        </button>
         <span id="sc-spinner" style="display:none;color:#718096">⏳ Đang khởi động...</span>
     </div>
 
     <div id="sc-scan-result"></div>
+    <div id="sc-optimize-result"></div>
 
     <?php if (!empty($results)): ?>
     <h3 style="font-size:14px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -3506,6 +3511,92 @@ function adsdefender_page_sitescanner(): void
                 result.innerHTML = '<div class="notice notice-error"><p>⚠️ Lỗi kết nối khi quét <strong>' + (LABELS[batchKey]||batchKey) + '</strong>: ' + (err && err.message ? err.message : 'network error') + '</p></div>';
             });
     }
+
+    // ── Tối ưu wp-config.php ────────────────────────────────────────────────
+    // Luôn xem trước rồi mới hỏi xác nhận — không tự ghi vào wp-config.php.
+    (function(){
+        var oBtn = document.getElementById('sc-btn-optimize');
+        if (!oBtn) return;
+        var oOut = document.getElementById('sc-optimize-result');
+
+        function call(preview, nonce) {
+            var fd = new FormData();
+            fd.append('action', 'adsdefender_cfg_optimize');
+            fd.append('nonce', nonce);
+            if (preview) fd.append('preview', '1');
+            return fetch(ajaxurl, {method:'POST', body:fd, credentials:'same-origin'})
+                .then(function(r){ return r.text(); })
+                .then(function(txt){
+                    try { return JSON.parse(txt); }
+                    catch(e) {
+                        var p = txt.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().substring(0,300);
+                        throw new Error(p || 'Server trả response không phải JSON');
+                    }
+                });
+        }
+
+        function rows(changes) {
+            return changes.map(function(c){
+                return '<tr><td style="padding:4px 10px 4px 0"><code>' + c.const + '</code></td>'
+                     + '<td style="padding:4px 10px 4px 0;color:#a0aec0">' + c.from + '</td>'
+                     + '<td style="padding:4px 10px 4px 0">→ <strong>' + c.to + '</strong></td>'
+                     + '<td style="padding:4px 0;color:#718096;font-size:12px">' + c.reason + '</td></tr>';
+            }).join('');
+        }
+
+        oBtn.addEventListener('click', function(){
+            var nonce = oBtn.getAttribute('data-nonce');
+            oBtn.disabled = true;
+            oOut.innerHTML = '<p style="color:#718096">⏳ Đang kiểm tra wp-config.php...</p>';
+
+            call(true, nonce).then(function(res){
+                if (!res.success) {
+                    oBtn.disabled = false;
+                    oOut.innerHTML = '<div class="notice notice-error"><p>' + (res.data || 'Lỗi không xác định') + '</p></div>';
+                    return;
+                }
+                var ch = res.data.changes || [];
+                if (!ch.length) {
+                    oBtn.disabled = false;
+                    oOut.innerHTML = '<div class="notice notice-success"><p>✅ ' + res.data.message + '</p></div>';
+                    return;
+                }
+                oOut.innerHTML = '<div class="notice notice-warning" style="padding:12px">'
+                    + '<p style="margin-top:0"><strong>Sẽ thay đổi ' + ch.length + ' mục trong wp-config.php:</strong></p>'
+                    + '<table style="font-size:13px;margin-bottom:10px">' + rows(ch) + '</table>'
+                    + '<p style="color:#718096;font-size:12px;margin-bottom:10px">'
+                    + 'Bản sao lưu được tạo trước khi ghi. Cú pháp bản mới được kiểm tra trước; '
+                    + 'nếu có lỗi thì file gốc giữ nguyên.</p>'
+                    + '<button type="button" id="sc-opt-go" class="button button-primary">Áp dụng</button> '
+                    + '<button type="button" id="sc-opt-no" class="button">Hủy</button>'
+                    + '</div>';
+
+                document.getElementById('sc-opt-no').addEventListener('click', function(){
+                    oBtn.disabled = false;
+                    oOut.innerHTML = '';
+                });
+                document.getElementById('sc-opt-go').addEventListener('click', function(){
+                    this.disabled = true;
+                    oOut.innerHTML = '<p style="color:#718096">⏳ Đang ghi và kiểm tra...</p>';
+                    call(false, nonce).then(function(r2){
+                        oBtn.disabled = false;
+                        if (!r2.success) {
+                            oOut.innerHTML = '<div class="notice notice-error"><p>' + (r2.data || 'Lỗi không xác định') + '</p></div>';
+                            return;
+                        }
+                        oOut.innerHTML = '<div class="notice notice-success"><p>✅ ' + r2.data.message + '</p></div>';
+                        setTimeout(function(){ location.reload(); }, 2000);
+                    }).catch(function(err){
+                        oBtn.disabled = false;
+                        oOut.innerHTML = '<div class="notice notice-error"><p>⚠️ ' + err.message + '</p></div>';
+                    });
+                });
+            }).catch(function(err){
+                oBtn.disabled = false;
+                oOut.innerHTML = '<div class="notice notice-error"><p>⚠️ ' + err.message + '</p></div>';
+            });
+        });
+    })();
 
     document.getElementById('sc-btn-scan').addEventListener('click', function(){
         var btn     = this;
