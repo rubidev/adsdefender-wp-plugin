@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.117
+ * Version:      2.5.118
  * Author:       AdsDefender
  * Update URI:   https://github.com/rubidev/adsdefender-wp-plugin
  * Requires PHP: 7.4
@@ -98,6 +98,21 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.118 Malware Scanner: sua loi "Loi ket noi khi quet Plugins".
+ *          - RecursiveIteratorIterator nem UnexpectedValueException tu getChildren() GIUA vong
+ *            lap khi gap thu muc khong doc duoc (hay gap tren shared hosting o wp-content/plugins).
+ *            Bat o ngoai foreach nen mat ca nhanh con lai, hoac thoat ra thanh trang HTML fatal.
+ *            Nay dung RecursiveCallbackFilterIterator loc truoc khi di xuong, va catch Throwable
+ *            thay vi Exception de giu lai phan da gom duoc
+ *          - $skip_dirs (node_modules, cache, backup...) truoc day dung rewind() de bo qua nhung
+ *            rewind() quay lai dau thu muc chu khong bo qua — cac thu muc nay chua bao gio duoc
+ *            loai tru, lam quet cham va ton bo nho
+ *          Them kiem tra CAU HINH .htaccess & wp-config.php (batch moi "config-audit"):
+ *          - wp-config: salt mac dinh, WP_DEBUG hien thi loi, ky tu sau ?>, quyen file qua rong,
+ *            thieu DISALLOW_FILE_EDIT, tien to bang wp_
+ *          - .htaccess: auto_prepend_file (backdoor), redirect ra ten mien ngoai, AddHandler php,
+ *            Options +Indexes, chua chan truy cap wp-config.php
+ *          - Bo qua dong comment, im lang tren Nginx, khong bao voi .htaccess mac dinh cua WP
  *  2.5.117 Sua loi Fatal khi cai chung voi plugin dung Freemius SDK (vd File Manager Advanced).
  *          Freemius goi update_option() ngay khi plugin dang nap, action 'updated_option' ban ra
  *          luc pluggable functions cua WP chua duoc dinh nghia — callback admin-log goi
@@ -276,7 +291,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.117');
+define('ADSDEFENDER_VERSION',        '2.5.118');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');
@@ -308,6 +323,7 @@ require_once ADSDEFENDER_DIR . 'includes/recaptcha.php';
 require_once ADSDEFENDER_DIR . 'includes/scripts.php';
 require_once ADSDEFENDER_DIR . 'includes/file-monitor.php';
 require_once ADSDEFENDER_DIR . 'includes/malware-scanner.php';
+require_once ADSDEFENDER_DIR . 'includes/config-audit.php';
 require_once ADSDEFENDER_DIR . 'includes/comment-security.php';
 require_once ADSDEFENDER_DIR . 'includes/update.php';
 require_once ADSDEFENDER_DIR . 'includes/utm.php';

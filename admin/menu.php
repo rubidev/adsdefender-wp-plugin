@@ -3449,8 +3449,8 @@ function adsdefender_page_sitescanner(): void
 
     <script>
     (function(){
-    var BATCHES = ['config','wp-includes','wp-admin','themes','plugins','uploads'];
-    var LABELS  = {'config':'Config files','wp-includes':'WP Core (depth 1)','wp-admin':'WP Admin','themes':'Themes','plugins':'Plugins','uploads':'Uploads'};
+    var BATCHES = ['config','config-audit','wp-includes','wp-admin','themes','plugins','uploads'];
+    var LABELS  = {'config':'Config files','config-audit':'Cấu hình (.htaccess & wp-config)','wp-includes':'WP Core (depth 1)','wp-admin':'WP Admin','themes':'Themes','plugins':'Plugins','uploads':'Uploads'};
 
     function runBatch(batchKey, offset, nonce, totalFound, totalScanned, btn, spinner, result) {
         spinner.textContent = '⏳ Đang quét: ' + (LABELS[batchKey] || batchKey) + (offset > 0 ? ' (trang '+ Math.ceil(offset/150+1) +')' : '') + '...';
