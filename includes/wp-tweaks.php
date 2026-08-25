@@ -118,6 +118,21 @@ add_filter('rest_endpoints', function (array $endpoints) {
 // Gửi qua PHP headers — nhanh, không cần htaccess, hoạt động cả Nginx lẫn LiteSpeed
 
 add_action('send_headers', function () {
+    // Plugin/theme khác có thể đã in output ra trước (PHP notice/deprecated, BOM,
+    // khoảng trắng sau thẻ đóng PHP). Khi đó headers đã gửi đi, mọi header() bên dưới
+    // vừa vô tác dụng vừa sinh warning trên trang của khách — thoát sớm.
+    // Ghi lại thủ phạm để chẩn đoán mà không cần bật WP_DEBUG trên production.
+    $sent_file = '';
+    $sent_line = 0;
+    if (headers_sent($sent_file, $sent_line)) {
+        update_option('adsdefender_headers_sent_by', [
+            'file' => $sent_file,
+            'line' => (int)$sent_line,
+            'time' => current_time('mysql'),
+        ], false);
+        return;
+    }
+
     $cfg = adsdefender_wt_opts();
 
     // B1: HSTS — Strict-Transport-Security

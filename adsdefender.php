@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.116
+ * Version:      2.5.117
  * Author:       AdsDefender
  * Update URI:   https://github.com/rubidev/adsdefender-wp-plugin
  * Requires PHP: 7.4
@@ -98,6 +98,14 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.117 Sua loi Fatal khi cai chung voi plugin dung Freemius SDK (vd File Manager Advanced).
+ *          Freemius goi update_option() ngay khi plugin dang nap, action 'updated_option' ban ra
+ *          luc pluggable functions cua WP chua duoc dinh nghia — callback admin-log goi
+ *          is_user_logged_in() gay Fatal trang wp-admin. Them guard function_exists() cho
+ *          is_user_logged_in() va wp_get_current_user().
+ *          Security Headers: bo qua khi headers da duoc gui truoc (plugin khac in output som,
+ *          BOM, khoang trang) thay vi de PHP sinh warning tren trang khach. Ghi lai file/dong
+ *          gay ra vao option adsdefender_headers_sent_by de chan doan
  *  2.5.116 File Scanner: don ket qua cu khong con dung. Truoc day quet lai chi upsert va xoa
  *          record cua file da bi xoa — canh bao cu nam lai vinh vien du signature da sua hay
  *          file da duoc va. Nay moi lan quet se xoa cac cap file|signature khong con khop
@@ -268,7 +276,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.116');
+define('ADSDEFENDER_VERSION',        '2.5.117');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');

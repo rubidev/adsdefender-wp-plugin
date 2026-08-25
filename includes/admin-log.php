@@ -51,7 +51,9 @@ function adsdefender_admin_log(
     $table = $wpdb->prefix . ADSDEFENDER_ADMIN_LOG_TABLE;
     if ($wpdb->get_var("SHOW TABLES LIKE '{$table}'") !== $table) return;
 
-    $user       = wp_get_current_user();
+    // wp_get_current_user() là pluggable — chưa tồn tại nếu hook bắn trong lúc
+    // WP còn đang nạp plugin. Ghi log với user rỗng còn hơn Fatal cả site.
+    $user       = function_exists('wp_get_current_user') ? wp_get_current_user() : null;
     $user_id    = $user ? (int)$user->ID : 0;
     $user_login = $user ? $user->user_login : '';
     $ip         = adsdefender_get_real_ip();
@@ -140,7 +142,10 @@ add_action('updated_option', function (string $option, $old, $new) {
         'active_plugins'              => 'Active Plugins',
     ];
     if (!isset($tracked[$option])) return;
-    if (!is_user_logged_in()) return;
+    // updated_option có thể bắn trong lúc plugin khác đang load (vd Freemius SDK gọi
+    // update_option ở đầu file plugin) — khi đó pluggable functions của WP chưa được
+    // định nghĩa. Gọi is_user_logged_in() lúc này sẽ Fatal, nên phải guard.
+    if (!function_exists('is_user_logged_in') || !is_user_logged_in()) return;
 
     $detail = $tracked[$option];
     // Plugin activate/deactivate
