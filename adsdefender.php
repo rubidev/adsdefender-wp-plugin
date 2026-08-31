@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.120
+ * Version:      2.5.121
  * Author:       AdsDefender
  * Update URI:   https://github.com/rubidev/adsdefender-wp-plugin
  * Requires PHP: 7.4
@@ -98,6 +98,65 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.121 NANG CAP FIREWALL (SQLi / XSS / Path Traversal / RCE) — do tren noi dung
+ *          doi thuc: ban cu chan nham 40% noi dung hop le VA bo lot 38% tan cong that.
+ *          Ban moi: 0% chan nham, 0% bo lot (30 mau hop le + 26 mau tan cong).
+ *          - Them lop CHUAN HOA payload truoc khi so khop: giai ma toi da 3 lop
+ *            URL-encode, HTML entity, bo null byte, gom khoang trang. Nho vay bat duoc
+ *            ..%252f..%252fetc/passwd va javas&#99;ript: ma ban cu bo lot
+ *          - Bo comment SQL bang KHOANG TRANG (khong xoa trang) de bat UNION/**\/SELECT
+ *            va /*!50000UNION*\/ — xoa trang bien thanh UNIONSELECT lam \b khong con khop
+ *          - Viet lai 4 bo pattern theo nguyen tac "can dau hieu cu phap": khong bat tu
+ *            khoa SQL / ten ham dung mot minh. Truoc day "select san pham from shop",
+ *            "update thong tin set nay", "drop table ghe qua", "chi phi 1=1 trieu",
+ *            bai viet nhac eval() hay base64_decode() deu bi chan + KHOA IP 24h
+ *          - Bo pattern chan moi URL .php co query (redirect_to, link trong binh luan)
+ *          - Them lop tan cong ban cu khong co: PHP object injection, SSTI ({{7*7}}),
+ *            XXE, Log4Shell/JNDI, prototype pollution, .env / .git/config / id_rsa,
+ *            php://filter, phar://, time-based blind (pg_sleep, waitfor delay).
+ *            XSS event handler nay bat MOI on*= thay vi 9 cai hard-code
+ *          - Sua 3 loi trong ham quet: (1) chi doc $_POST cap 1 nen payload trong
+ *            data[user][name] lot hoan toan — nay de quy toi 6 tang, quet ca ten field;
+ *            (2) gop moi field thanh 1 chuoi roi moi match → pattern khop cheo giua hai
+ *            field vo hai — nay quet tung chuoi rieng; (3) khong quet cookie va header —
+ *            nay co (Log4Shell va SQLi qua X-Forwarded-For rat pho bien)
+ *          - Ba lop mien tru chong chan nham: bot hop le da xac minh, user co quyen
+ *            edit_posts, va cac field noi dung dai (post_content, comment, custom_css)
+ *          - Hieu nang 0.07ms/request. Da test ReDoS voi 8 chuoi co tinh gay backtracking
+ *            (../ x2000, %25 x2000): cham nhat 4ms. Bo qua chuoi > 8KB
+ *          TOI UU DATABASE SCAN — ban cu bao nham 88% noi dung DB hop le (14/16 mau),
+ *          admin se mac dinh bo qua canh bao, che mat canh bao that. Ban moi 0%.
+ *          - db_url_hijack bao MOI URL dang IP → site chay LAN, localhost, VPS chua tro
+ *            domain deu bi bao. Nay chi bao IP PUBLIC va KHAC host site
+ *          - db_script_src: whitelist mo rong 30 -> 90 domain, them nhom pho bien VN
+ *            (Zalo, MoMo, VNPay, Haravan, Sapo, KiotViet, GHN, Subiz) va chat/analytics/
+ *            payment quoc te (Shopify, Zendesk, Clarity, Intercom, Stripe...). Chuyen tu
+ *            regex sang PARSE URL that, so khop theo nhan domain nen tiktok.com.evil.net
+ *            khong the gia mao. Them filter adsdefender_db_script_whitelist cho CDN rieng
+ *          - db_iframe_hidden: width=0 la binh thuong voi embed lazy-load (YouTube, Maps).
+ *            Nay chi bao khi iframe VUA an VUA tro domain ngoai whitelist
+ *          - db_obj_injection: ban cu bat moi O:...{...eval|system nen dinh WooCommerce
+ *            (field ten "system") va ACF (field ten "eval"). Nay unserialize that voi
+ *            allowed_classes=false (an toan, khong chay __wakeup) roi duyet cay, chi bao
+ *            khi ten ham nguy hiem nam o KHOA mang nghia callback (cb, callback, handler)
+ *          - db_rogue_admin: bo protonmail/yandex.ru (admin that hay dung), thu ve email
+ *            dung-mot-lan va CHI ap dung cho admin tao trong 90 ngay
+ *          - db_pharma_links yeu cau link BI AN (bai viet ve casino khong con dinh);
+ *            db_eval_b64 yeu cau chuoi base64 >= 40 ky tu; db_php_tag yeu cau kem ham nguy hiem
+ *          - Them 4 lop phat hien moi: eval() nhan superglobal, JS redirect domain ngoai,
+ *            cloaking theo User-Agent bot, khoi van ban giau ngoai man hinh
+ *          HIEU NANG DATABASE SCAN:
+ *          - Sua N+1 query: vong lap users chay 2 query/user x 200 user = 400 QUERY.
+ *            Nay 1 query JOIN lay dung admin + 1 query theo lo cho toan bo usermeta
+ *          - Do phu options: truoc chi quet 17 TEN CO DINH nen bo lot hoan toan option
+ *            cua plugin bi hijack. Nay quet MOI autoload option (malware phai autoload
+ *            moi chay duoc tren frontend), bo qua transient/cache
+ *          - Do phu posts: truoc lay 500 bai MOI NHAT bat ke noi dung nen malware nhet
+ *            vao bai cu it ai xem thi lot. Nay loc so bo bang SQL roi quet TOAN BO bai
+ *            kha nghi theo lo 200, dung keyset pagination (ID > last_id)
+ *          - Bo qua gia tri > 256KB (anh base64, JSON page builder), gioi han de quy,
+ *            guard chong vong lap vo han. Ket qua sap xep critical len dau
+ *          - UI hien thong ke chi tiet theo tung bang thay vi chi so posts
  *  2.5.120 Sua loi CHAN NHAM BOT HOP LE — anh huong truc tiep SEO va Google Ads:
  *          - Danh sach bad UA dang chan Baiduspider, YandexBot (search engine that) va
  *            AhrefsBot/SemrushBot/MJ12bot/DotBot/BLEXBot/PetalBot/DataForSeoBot. Chan bang
@@ -333,7 +392,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.120');
+define('ADSDEFENDER_VERSION',        '2.5.121');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');

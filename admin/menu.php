@@ -884,8 +884,12 @@ function adsdefender_page_settings()
                 <td>
                     <label><input type="checkbox" name="adsdefender_settings[fw_enabled]" value="1"
                         <?php checked(!empty($opts['fw_enabled'])); ?>>
-                    Phát hiện và block SQLi, XSS, Path Traversal, Shellcode</label>
-                    <p class="description">Kiểm tra URL và POST data — block ngay với 403 khi phát hiện tấn công.</p>
+                    Phát hiện và block SQLi, XSS, Path Traversal, RCE</label>
+                    <p class="description">Quét URL, query, POST (kể cả mảng lồng nhau), cookie và header —
+                    block ngay với 403 khi phát hiện tấn công. Payload được chuẩn hoá trước khi so khớp
+                    (giải mã nhiều lớp URL-encode, HTML entity, comment SQL) nên bắt được cả kỹ thuật né filter.
+                    <br>Bỏ qua: bot hợp lệ đã xác minh, người dùng có quyền sửa bài, và các field nội dung dài
+                    (bài viết, bình luận) — nên không chặn nhầm biên tập viên.</p>
                 </td>
             </tr>
             <tr>
@@ -3213,8 +3217,16 @@ function adsdefender_page_sitescanner(): void
             <div class="sc-lbl">Lần quét gần nhất</div>
         </div>
         <div class="sc-card">
-            <div class="sc-val"><?php echo (int)($db_scan_meta['posts_scanned'] ?? 0); ?></div>
-            <div class="sc-lbl">Posts đã quét</div>
+            <?php $db_st = $db_scan_meta['stats'] ?? []; ?>
+            <div class="sc-val"><?php echo (int)array_sum(array_map('intval', $db_st ?: [0])); ?></div>
+            <div class="sc-lbl">Bản ghi đã quét</div>
+            <?php if ($db_st): ?>
+            <div style="font-size:10px;color:#a0aec0;margin-top:2px">
+                <?php echo esc_html(sprintf('opt %d · post %d · meta %d · user %d',
+                    $db_st['options'] ?? 0, $db_st['posts'] ?? 0,
+                    ($db_st['postmeta'] ?? 0) + ($db_st['usermeta'] ?? 0), $db_st['users'] ?? 0)); ?>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 
