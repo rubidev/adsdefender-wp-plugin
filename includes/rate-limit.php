@@ -88,6 +88,11 @@ function adsdefender_rate_limit_check(): void
     $ip = adsdefender_get_real_ip();
     if (!$ip) return;
 
+    // Bot hợp pháp đã xác minh (AdsBot-Google, Googlebot, Bingbot…) không bị
+    // rate limit — AdsBot crawl landing page rất nhanh, dính 429 là quảng cáo
+    // có thể bị từ chối.
+    if (adsdefender_is_verified_bot($ip)) return;
+
     // Temp/permanent whitelist không bị rate limit
     if (adsdefender_is_temp_whitelisted($ip)) return;
     $opts_s = adsdefender_settings();

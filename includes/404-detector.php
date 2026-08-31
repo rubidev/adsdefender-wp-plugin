@@ -81,6 +81,10 @@ add_action('wp', function () {
 
     if (!$ip) return;
 
+    // Bot hợp pháp đã xác minh không bị count — bot thử URL biến thể là bình
+    // thường, khoá IP vì vài cái 404 sẽ chặn nhầm Googlebot/AdsBot.
+    if (adsdefender_is_verified_bot($ip)) return;
+
     // Whitelist không bị count
     if (adsdefender_is_temp_whitelisted($ip)) return;
 

@@ -3,7 +3,7 @@
  * Plugin Name:  AdsDefender
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.119
+ * Version:      2.5.120
  * Author:       AdsDefender
  * Update URI:   https://github.com/rubidev/adsdefender-wp-plugin
  * Requires PHP: 7.4
@@ -98,6 +98,34 @@
  *  CHANGELOG
  * ════════════════════════════════════════════════════════════════════════════════
  *
+ *  2.5.120 Sua loi CHAN NHAM BOT HOP LE — anh huong truc tiep SEO va Google Ads:
+ *          - Danh sach bad UA dang chan Baiduspider, YandexBot (search engine that) va
+ *            AhrefsBot/SemrushBot/MJ12bot/DotBot/BLEXBot/PetalBot/DataForSeoBot. Chan bang
+ *            403 + ghi lockout lam mat index va phinh bang lockout. Da go search engine
+ *            hoan toan; nhom bot SEO chuyen sang tuy chon rieng "Chan bot SEO" (mac dinh TAT,
+ *            khi bat thi tra 403 nhung KHONG khoa IP)
+ *          - Go cac pattern chan nham hang loat: 'curl/7.1'-'curl/7.9' la prefix match nen
+ *            dang chan gan nhu toan bo curl 7.x (ke ca curl/7.81 mac dinh Ubuntu 22.04);
+ *            'python-requests/2.1' chan ca 2.10-2.19; 'LWP' 3 ky tu dinh bua; 'Java/' chan
+ *            nhieu webhook hop le. Don trung lap (masscan 2 lan, zmeu/ZmEu, dirb)
+ *          - UA rong truoc day bi 403 + khoa IP o MOI request (cron hosting, uptime monitor
+ *            deu dinh). Nay chi chan khi nham vao endpoint nhay cam (wp-login, xmlrpc,
+ *            wp-admin, wp-config, .env, /wp-json/wp/v2/users)
+ *          GOOGLE ADS BOT KHONG QUET DUOC TRANG DICH — nguyen nhan la Rate Limiting:
+ *          - AdsBot-Google crawl landing page rat nhanh de cham diem chat luong, de vuot
+ *            nguong 300 req/60s. Vuot la bi khoa IP + tra 429 → bot bao "trang dich khong
+ *            truy cap duoc" → quang cao bi tu choi. 404-detector cung khoa khi bot thu vai URL
+ *          - Them lop xac minh bot moi adsdefender_is_verified_bot(): KHONG tin UA suong ma
+ *            dung rDNS + forward-confirm dung cach Google khuyen nghi. Phu AdsBot-Google,
+ *            Mediapartners-Google, Googlebot, Google-InspectionTool, Bingbot, AdIdxBot,
+ *            YandexBot, Baiduspider, DuckDuckBot, Applebot. Cache 24h, ho tro IPv4/IPv6
+ *          - Noi vao rate-limit, 404-detector, honeypot, va chot chan cuoi trong
+ *            adsdefender_upsert_lockout() — khong bao gio khoa bot da xac minh
+ *          Mo rong danh sach bad UA: 22 -> 97 pattern. Them scanner hien dai (invicti,
+ *          arachni, wapiti, whatweb, feroxbuster, dirsearch, nuclei, zaproxy, crackmapexec),
+ *          payload Log4Shell nhet trong UA, cong cu brute-force, site ripper, va AI scraper
+ *          phot lo robots.txt (bytespider, imagesiftbot, omgili). Tat ca pattern deu duoc
+ *          test de khong dinh phan mem hop le cung ten (Canvas LMS, log4js, httpx, Hydra...)
  *  2.5.119 Sua 2 signature bao dong gia (bat oan plugin hop phap):
  *          - hidden_spam_div bat MOI <div style="display:none"> nen wpforms, litespeed-cache,
  *            freemius debug templates deu bi cham high. Div an la chuyen binh thuong (modal,
@@ -305,7 +333,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.119');
+define('ADSDEFENDER_VERSION',        '2.5.120');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');

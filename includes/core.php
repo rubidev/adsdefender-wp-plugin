@@ -200,6 +200,10 @@ function adsdefender_upsert_lockout(string $ip, string $source = 'matomo'): void
     if (!empty($whitelist) && adsdefender_ip_matches($ip, $whitelist)) return;
     if (adsdefender_is_temp_whitelisted($ip)) return;
 
+    // Chốt chặn cuối: không bao giờ khoá bot hợp pháp đã xác minh, bất kể
+    // module nào gọi tới. Chỉ áp dụng khi khoá chính IP đang request.
+    if ($ip === adsdefender_get_real_ip() && adsdefender_is_verified_bot($ip)) return;
+
     global $wpdb;
     $table    = $wpdb->prefix . ADSDEFENDER_LOCKOUT_TABLE;
     $duration = max(1, (int)($opts['lockout_duration'] ?? 1440)); // phút
@@ -279,6 +283,96 @@ function adsdefender_cleanup_lockouts(): void
     global $wpdb;
     $table = $wpdb->prefix . ADSDEFENDER_LOCKOUT_TABLE;
     $wpdb->query("UPDATE `{$table}` SET is_active = 0 WHERE expires_at < NOW() AND is_active = 1");
+}
+
+// ─── Verified Bot (Google / Bing / Yandex …) ─────────────────────────────────
+//
+// Bot hợp pháp KHÔNG được rate-limit, 404-flood hay honeypot khoá IP.
+// Đặc biệt quan trọng với AdsBot-Google: nó crawl landing page rất nhanh để
+// chấm điểm chất lượng — bị 429 một lần là quảng cáo có thể bị từ chối.
+//
+// Không tin UA suông (UA giả mạo rất dễ). Xác minh theo cách Google khuyến nghị:
+// rDNS về đúng domain của hãng, rồi forward-confirm hostname đó trở lại IP.
+// Kết quả cache 24h vì DNS lookup tốn thời gian.
+
+function adsdefender_bot_ua_map(): array
+{
+    return [
+        // UA fragment (lowercase) => các hậu tố hostname hợp lệ
+        'adsbot-google'        => ['.googlebot.com', '.google.com'],
+        'mediapartners-google' => ['.googlebot.com', '.google.com'],
+        'googlebot'            => ['.googlebot.com', '.google.com'],
+        'google-inspectiontool' => ['.googlebot.com', '.google.com'],
+        'storebot-google'      => ['.googlebot.com', '.google.com'],
+        'google-safety'        => ['.googlebot.com', '.google.com'],
+        'apis-google'          => ['.googlebot.com', '.google.com'],
+        'feedfetcher-google'   => ['.googlebot.com', '.google.com'],
+        'bingbot'              => ['.search.msn.com'],
+        'adidxbot'             => ['.search.msn.com'],
+        'msnbot'               => ['.search.msn.com'],
+        'yandexbot'            => ['.yandex.ru', '.yandex.net', '.yandex.com'],
+        'yandexads'            => ['.yandex.ru', '.yandex.net', '.yandex.com'],
+        'baiduspider'          => ['.baidu.com', '.baidu.jp'],
+        'duckduckbot'          => ['.duckduckgo.com'],
+        'applebot'             => ['.applebot.apple.com', '.apple.com'],
+    ];
+}
+
+/**
+ * IP hiện tại có phải bot hợp pháp đã xác minh không?
+ * Trả false nếu UA không khai là bot, hoặc rDNS/forward-confirm thất bại.
+ */
+function adsdefender_is_verified_bot(string $ip = ''): bool
+{
+    static $memo = null;
+    if ($memo !== null) return $memo;   // 1 request chỉ tính 1 lần
+
+    $ua = strtolower($_SERVER['HTTP_USER_AGENT'] ?? '');
+    if ($ua === '') return $memo = false;
+
+    $suffixes = [];
+    foreach (adsdefender_bot_ua_map() as $frag => $hosts) {
+        if (str_contains($ua, $frag)) { $suffixes = $hosts; break; }
+    }
+    if (!$suffixes) return $memo = false;   // UA không khai là bot → khỏi lookup
+
+    $ip = $ip !== '' ? $ip : adsdefender_get_real_ip();
+    if (!$ip || !filter_var($ip, FILTER_VALIDATE_IP)) return $memo = false;
+
+    $key    = 'adsdefender_vbot_' . md5($ip);
+    $cached = get_transient($key);
+    if ($cached !== false) return $memo = ($cached === '1');
+
+    $ok = adsdefender_bot_rdns_confirm($ip, $suffixes);
+    // Cache kết quả tốt lâu hơn kết quả xấu (tránh khoá nhầm vì DNS chập chờn)
+    set_transient($key, $ok ? '1' : '0', $ok ? DAY_IN_SECONDS : HOUR_IN_SECONDS);
+    return $memo = $ok;
+}
+
+/** rDNS + forward-confirm. */
+function adsdefender_bot_rdns_confirm(string $ip, array $suffixes): bool
+{
+    $host = @gethostbyaddr($ip);
+    if (!$host || $host === $ip) return false;
+
+    $host = strtolower(rtrim($host, '.'));
+    $match = false;
+    foreach ($suffixes as $suffix) {
+        if (str_ends_with($host, $suffix)) { $match = true; break; }
+    }
+    if (!$match) return false;
+
+    // Forward-confirm: hostname phải resolve ngược lại chính IP đó
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        $recs = @dns_get_record($host, DNS_AAAA);
+        foreach ($recs ?: [] as $r) {
+            if (!empty($r['ipv6']) && inet_pton($r['ipv6']) === inet_pton($ip)) return true;
+        }
+        return false;
+    }
+
+    $ips = @gethostbynamel($host);
+    return is_array($ips) && in_array($ip, $ips, true);
 }
 
 // ─── Temp Whitelist (Admin IP tự động) ───────────────────────────────────────

@@ -27,32 +27,74 @@ function adsdefender_ua_enabled(): bool
 }
 
 // ─── Bad User-Agent list ──────────────────────────────────────────────────────
-// Tổng hợp từ HackRepair BadBots list + phổ biến trong thực tế VN
+// Chỉ gồm scanner / tool tấn công thật. KHÔNG đưa search engine hay bot SEO
+// vào đây — chúng không tấn công, và block 403 + ghi lockout sẽ làm mất index
+// và phình bảng lockout vô ích. Bot SEO xem adsdefender_seo_bot_patterns().
+// So khớp bằng str_contains trên UA đã strtolower → viết thường hết.
 
 function adsdefender_bad_ua_patterns(): array
 {
     return [
-        // Security scanners
+        // ── Web vulnerability scanner ──
         'nikto', 'nmap', 'masscan', 'nessus', 'openvas', 'w3af', 'sqlmap',
-        'dirbuster', 'dirb', 'gobuster', 'wfuzz', 'ffuf', 'nuclei', 'burpsuite',
-        'acunetix', 'appscan', 'webinspect', 'netsparker', 'qualys', 'rapid7',
-        'metasploit', 'havij', 'pangolin', 'jsky', 'absinthe',
-        // Web scrapers / bots xấu
-        'zmeu', 'morfeus', 'ZmEu', 'libwww-perl', 'python-requests/2.1',
-        'curl/7.1', 'curl/7.2', 'curl/7.3', 'curl/7.4', 'curl/7.5',
-        'curl/7.6', 'curl/7.7', 'curl/7.8', 'curl/7.9',
-        'lwp-trivial', 'lwp-request', 'LWP', 'wget/', 'urllib',
-        'go-http-client/1.1', 'go-http-client/2.0',
-        // DDoS / click fraud tools
-        'masscan', 'zgrab', 'shodan', 'censys', 'internetmeasurement',
-        'MJ12bot', 'SemrushBot', 'DotBot', 'BLEXBot',
-        'PetalBot', 'DataForSeoBot', 'AhrefsBot',
-        // WordPress-specific attack bots
-        'WPScan', 'wordpress_exploit',
-        // Shell / exploit strings in UA
-        '/bin/sh', '/bin/bash', 'cmd.exe', 'wget http', 'curl http',
-        // Empty UA or known bad patterns
-        'Java/', 'Baiduspider', 'YandexBot',
+        'acunetix', 'appscan', 'webinspect', 'netsparker', 'invicti', 'qualys',
+        'arachni', 'skipfish', 'wapiti', 'whatweb', 'joomscan', 'uniscan',
+        'paros', 'ratproxy', 'grendel-scan', 'webshag', 'nsauditor',
+
+        // ── Fuzzer / brute-force thư mục ──
+        'dirbuster', 'gobuster', 'feroxbuster', 'dirsearch', 'wfuzz', 'ffuf',
+        'nuclei', 'hakrawler', 'gospider', 'crackmapexec',
+
+        // ── Proxy tấn công / framework khai thác ──
+        'burpsuite', 'burp collaborator', 'owasp zap', 'zaproxy',
+        'metasploit', 'core impact',
+
+        // ── Tool SQLi / exploit cũ nhưng vẫn gặp ──
+        'havij', 'pangolin', 'jsky', 'absinthe', 'bsqlbf', 'sqlninja',
+
+        // ── Bot khai thác lỗ hổng đã biết ──
+        'zmeu', 'morfeus', 'zgrab', 'l9explore', 'l9tcpid',
+        'xmrig', 'mozlila', 'chroot-apach0day',
+
+        // ── Payload Log4Shell / RCE nhét thẳng vào UA ──
+        '${jndi:', 'jndi:ldap', '${lower:', 'log4shell',
+
+        // ── Thư viện HTTP gần như chỉ dùng để scan ──
+        'libwww-perl', 'lwp-trivial', 'lwp-request', 'winhttp.winhttprequest',
+
+        // ── WordPress / CMS specific ──
+        'wpscan', 'wordpress_exploit', 'wpsec', 'cmsmap', 'droopescan',
+        'wp-scanner', 'xmlrpc-attack',
+
+        // ── Credential stuffing / brute-force ──
+        // Dùng dạng có dấu '/' để không dính app hợp lệ tên Hydra/Medusa
+        'thc-hydra', 'hydra/', 'medusa/', 'patator/', 'ncrack', 'brutus',
+
+        // ── Email / content harvester, site ripper ──
+        'emailcollector', 'emailsiphon', 'emailwolf', 'extractorpro',
+        'atomic_email_hunter', 'cheesebot', 'chinaclaw', 'webbandit',
+        'webcopier', 'webstripper', 'webzip', 'teleport pro',
+        'offline explorer', 'httrack', 'sitesnagger', 'superhttp',
+        'webauto', 'wget++', 'grab-a-site',
+
+        // ── AI scraper phớt lờ robots.txt (ghi nhận nhiều 2024–2025) ──
+        'bytespider', 'imagesiftbot', 'omgili',
+    ];
+}
+
+// ─── SEO / crawler bot ───────────────────────────────────────────────────────
+// Không độc hại — chỉ tốn băng thông. Mặc định TẮT. Khi bật thì trả 403 nhưng
+// KHÔNG ghi lockout (xem tham số $lockout của adsdefender_fw_block).
+// Cách đúng để hạn chế các bot này là robots.txt / Crawl-delay.
+
+function adsdefender_seo_bot_patterns(): array
+{
+    return [
+        'ahrefsbot', 'semrushbot', 'dotbot', 'mj12bot', 'blexbot',
+        'petalbot', 'dataforseobot', 'seokicks', 'sistrix', 'serpstatbot',
+        'megaindex', 'linkdexbot', 'spbot',
+        // Scanner khảo sát Internet — không tấn công, chỉ lập chỉ mục dịch vụ
+        'shodan', 'censys', 'internetmeasurement',
     ];
 }
 
@@ -221,32 +263,56 @@ function adsdefender_ua_check(): void
 {
     if (!adsdefender_ua_enabled()) return;
     if (defined('WP_CLI') && WP_CLI) return;
+    if (defined('DOING_CRON') && DOING_CRON) return;
 
     // Skip whitelist
-    $ip_ua = adsdefender_get_real_ip();
+    $ip = adsdefender_get_real_ip();
     $opts_ua = adsdefender_settings();
     $wl_ua = adsdefender_parse_whitelist($opts_ua['whitelist'] ?? '');
-    if (!empty($wl_ua) && adsdefender_ip_matches($ip_ua, $wl_ua)) return;
-    if (adsdefender_is_temp_whitelisted($ip_ua)) return;
+    if (!empty($wl_ua) && adsdefender_ip_matches($ip, $wl_ua)) return;
+    if (adsdefender_is_temp_whitelisted($ip)) return;
 
-    $ua = strtolower($_SERVER['HTTP_USER_AGENT'] ?? '');
+    $uri = $_SERVER['REQUEST_URI'] ?? '/';
+    $ua  = strtolower($_SERVER['HTTP_USER_AGENT'] ?? '');
+
+    // UA rỗng: nhiều thứ hợp lệ (cron hosting, uptime monitor, health check)
+    // gửi UA rỗng → chỉ chặn khi nhắm vào endpoint nhạy cảm.
     if ($ua === '') {
-        // Không có UA → thường là scanner, bot
-        $ip = adsdefender_get_real_ip();
-        adsdefender_fw_block($ip, 'empty_ua', $_SERVER['REQUEST_URI'] ?? '/');
+        if (adsdefender_ua_is_sensitive_uri($uri)) {
+            adsdefender_fw_block($ip, 'empty_ua', $uri);
+        }
         return;
     }
 
-    $ip = adsdefender_get_real_ip();
     foreach (adsdefender_bad_ua_patterns() as $bad) {
-        if (str_contains($ua, strtolower($bad))) {
-            adsdefender_fw_block($ip, 'bad_ua:' . $bad, $_SERVER['REQUEST_URI'] ?? '/');
+        if (str_contains($ua, $bad)) {
+            adsdefender_fw_block($ip, 'bad_ua:' . $bad, $uri);
             return;
+        }
+    }
+
+    // Bot SEO — tuỳ chọn riêng, chặn nhưng không ghi lockout
+    if (!empty($opts_ua['seo_bot_block'])) {
+        foreach (adsdefender_seo_bot_patterns() as $bot) {
+            if (str_contains($ua, $bot)) {
+                adsdefender_fw_block($ip, 'seo_bot:' . $bot, $uri, false);
+                return;
+            }
         }
     }
 }
 
-function adsdefender_fw_block(string $ip, string $reason, string $uri): void
+// Endpoint mà UA rỗng gần như chắc chắn là bot dò tìm
+function adsdefender_ua_is_sensitive_uri(string $uri): bool
+{
+    $u = strtolower($uri);
+    foreach (['wp-login.php', 'xmlrpc.php', '/wp-admin', 'wp-config', '.env', '/wp-json/wp/v2/users'] as $needle) {
+        if (str_contains($u, $needle)) return true;
+    }
+    return false;
+}
+
+function adsdefender_fw_block(string $ip, string $reason, string $uri, bool $lockout = true): void
 {
     // IP trong whitelist → không block, không ghi lockout
     if ($ip) {
@@ -256,10 +322,13 @@ function adsdefender_fw_block(string $ip, string $reason, string $uri): void
         if (adsdefender_is_temp_whitelisted($ip)) return;
     }
 
-    // Ghi lockout
+    // Ghi lockout — bỏ qua với bot vô hại ($lockout = false) để không phình
+    // bảng lockout và che mất cảnh báo tấn công thật
     if ($ip) {
-        adsdefender_upsert_lockout($ip, 'firewall');
-        adsdefender_log_block($ip);
+        if ($lockout) {
+            adsdefender_upsert_lockout($ip, 'firewall');
+            adsdefender_log_block($ip);
+        }
         adsdefender_sec_log('firewall', $ip, $reason . ' | ' . substr($uri, 0, 200));
     }
 

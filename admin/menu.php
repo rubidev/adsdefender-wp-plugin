@@ -149,6 +149,7 @@ function adsdefender_sanitize_settings(array $in): array
         // ── Firewall ──
         'fw_enabled'         => !empty($in['fw_enabled'])       ? 1 : 0,
         'ua_enabled'         => !empty($in['ua_enabled'])       ? 1 : 0,
+        'seo_bot_block'      => !empty($in['seo_bot_block'])    ? 1 : 0,
 
         // ── Hide Login ──
         'hl_enabled'         => !empty($in['hl_enabled'])       ? 1 : 0,
@@ -892,8 +893,20 @@ function adsdefender_page_settings()
                 <td>
                     <label><input type="checkbox" name="adsdefender_settings[ua_enabled]" value="1"
                         <?php checked(!empty($opts['ua_enabled'])); ?>>
-                    Block scanner, bot độc hại theo User-Agent (HackRepair list + thực tế VN)</label>
-                    <p class="description">Block Nikto, SQLmap, WPScan, DirBuster và các tool quét lỗ hổng phổ biến.</p>
+                    Block scanner, bot độc hại theo User-Agent</label>
+                    <p class="description">Block Nikto, SQLmap, WPScan, DirBuster và các tool quét lỗ hổng phổ biến.
+                    <strong>Không</strong> chặn Google, Bing, Yandex, Baidu hay bot SEO.</p>
+                </td>
+            </tr>
+            <tr>
+                <th>Chặn bot SEO</th>
+                <td>
+                    <label><input type="checkbox" name="adsdefender_settings[seo_bot_block]" value="1"
+                        <?php checked(!empty($opts['seo_bot_block'])); ?>>
+                    Block AhrefsBot, SemrushBot, MJ12bot, DotBot, BLEXBot, PetalBot…</label>
+                    <p class="description">Các bot này <em>không</em> tấn công — chỉ tốn băng thông. Bật nếu bạn muốn
+                    tiết kiệm tài nguyên. Chúng bị trả 403 nhưng <strong>không</strong> bị khoá IP.
+                    Lưu ý: bật xong thì Ahrefs/Semrush sẽ không audit được chính site bạn.</p>
                 </td>
             </tr>
 

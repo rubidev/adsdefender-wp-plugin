@@ -52,6 +52,7 @@ function adsdefender_hp_validate(): void
 {
     if (!adsdefender_hp_enabled()) return;
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
+    if (adsdefender_is_verified_bot()) return;
 
     $field = adsdefender_hp_field_name();
     // Nếu field tồn tại trong POST và có giá trị → bot
