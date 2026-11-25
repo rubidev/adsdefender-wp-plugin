@@ -1,4 +1,8 @@
 <?php
+/*
+ * AdsDefender — Copyright (c) 2026 saigon.pro — https://saigon.pro
+ * Ủng hộ tác giả (Donate): https://www.paypal.com/paypalme/dangngocsoncom
+ */
 /**
  * AdsDefender — Honeypot
  *
@@ -63,11 +67,7 @@ function adsdefender_hp_validate(): void
             adsdefender_log_block($ip);
         }
 
-        if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
-        nocache_headers();
-        http_response_code(403);
-        echo '403 Forbidden.';
-        exit;
+        adsdefender_block_response('honeypot', 403);
     }
 }
 

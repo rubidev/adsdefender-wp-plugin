@@ -1,4 +1,8 @@
 <?php
+/*
+ * AdsDefender — Copyright (c) 2026 saigon.pro — https://saigon.pro
+ * Ủng hộ tác giả (Donate): https://www.paypal.com/paypalme/dangngocsoncom
+ */
 if (!defined('ABSPATH')) exit;
 
 // Ngan CSV/formula injection khi mo file bang Excel/Sheets (fields bat dau bang =,+,-,@,tab,CR)
@@ -331,6 +335,9 @@ add_action('rest_api_init', function () {
 
             $wpdb->insert($t, $lead);
             $lead_id = $wpdb->insert_id;
+            if (function_exists('adsdefender_lt_conversion')) {
+                adsdefender_lt_conversion('lead', 'Popup ' . ($lead['popup_id'] ?: '#' . $lead_id), 0, (string) ($req->get_header('referer') ?? ''));
+            }
 
             adsdefender_lead_send_email($lead);
 

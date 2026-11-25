@@ -1,4 +1,8 @@
 <?php
+/*
+ * AdsDefender — Copyright (c) 2026 saigon.pro — https://saigon.pro
+ * Ủng hộ tác giả (Donate): https://www.paypal.com/paypalme/dangngocsoncom
+ */
 if (!defined('ABSPATH')) exit;
 
 // ─── Settings cache ────────────────────────────────────────────────────────────
@@ -12,7 +16,6 @@ function adsdefender_settings(bool $refresh = false): array
 
 add_action('update_option_adsdefender_settings', function () {
     adsdefender_settings(true);
-    adsdefender_create_blocked_html();
 }, 10, 0);
 
 // ─── Auto-upgrade khi update plugin (không cần deactivate/activate) ──────────
@@ -29,19 +32,29 @@ add_action('plugins_loaded', function () {
 
 function adsdefender_run_migrations(string $from): void
 {
+    // Migration 2.5.122 — trang chặn render tại chỗ, bỏ file tĩnh trong thư mục gốc;
+    // bảng Live Traffic
+    if (version_compare($from, '2.5.122', '<')) {
+        if (function_exists('adsdefender_lt_create_table')) adsdefender_lt_create_table();
+        $static = ABSPATH . 'adsdefender-blocked.html';
+        if (is_file($static) && strpos((string) @file_get_contents($static, false, null, 0, 20000), 'AdsDefender') !== false) {
+            @unlink($static);
+        }
+    }
+
     // Migration 2.5.79 — tạo bảng scan_results
     if (version_compare($from, '2.5.79', '<')) {
-        adsdefender_scan_create_table();
+        if (function_exists('adsdefender_scan_create_table')) adsdefender_scan_create_table();
     }
 
     // Migration 2.5.78 — tạo bảng file_monitor
     if (version_compare($from, '2.5.78', '<')) {
-        adsdefender_fm_create_table();
+        if (function_exists('adsdefender_fm_create_table')) adsdefender_fm_create_table();
     }
 
     // Migration 2.5.59 — tạo bảng admin_log
     if (version_compare($from, '2.5.59', '<')) {
-        adsdefender_create_admin_log_table();
+        if (function_exists('adsdefender_create_admin_log_table')) adsdefender_create_admin_log_table();
     }
 
     // Migration 2.5.58 — tạo bảng security_log tập trung
@@ -51,7 +64,7 @@ function adsdefender_run_migrations(string $from): void
 
     // Migration 2.5.39 — tạo bảng brute_events cho security modules
     if (version_compare($from, '2.5.39', '<')) {
-        adsdefender_create_bf_table();
+        if (function_exists('adsdefender_create_bf_table')) adsdefender_create_bf_table();
     }
 
     // Migration 2.5.37 — tạo bảng lockouts + dọn dẹp dữ liệu cũ + xóa IP khỏi .htaccess
@@ -59,8 +72,8 @@ function adsdefender_run_migrations(string $from): void
         // 1. Tạo / cập nhật tất cả DB tables
         adsdefender_create_lockouts_table();
         adsdefender_create_log_table();
-        adsdefender_create_utm_table();
-        adsdefender_create_lead_table();
+        if (function_exists('adsdefender_create_utm_table'))  adsdefender_create_utm_table();
+        if (function_exists('adsdefender_create_lead_table')) adsdefender_create_lead_table();
 
         // 2. Xóa block log cũ vượt 10k dòng
         global $wpdb;
@@ -102,6 +115,30 @@ function adsdefender_rest_token(): string
     return $t;
 }
 
+/**
+ * Token BÍ MẬT cho /sync (lệnh đồng bộ từ máy chủ). Tách khỏi adsdefender_rest_token() vì token kia
+ * được in ra mọi trang (window.adUTM.token) cho popup / conversion → ai xem mã nguồn cũng có.
+ */
+function adsdefender_sync_token(): string
+{
+    $t = get_option('adsdefender_sync_token', '');
+    if (!$t) {
+        $t = bin2hex(random_bytes(24));
+        update_option('adsdefender_sync_token', $t, false);
+    }
+    return $t;
+}
+
+function adsdefender_verify_sync_token(WP_REST_Request $req)
+{
+    $token = (string) ($req->get_header('X-ADS-Token') ?: $req->get_param('_ads_token'));
+    if (!hash_equals(adsdefender_sync_token(), $token)) {
+        return new WP_Error('adsdefender_forbidden', 'Invalid token', ['status' => 403]);
+    }
+    return true;
+}
+
+/** Token CÔNG KHAI (in trong trang) — chỉ chống gửi form tự động đơn giản, không phải bí mật. */
 function adsdefender_verify_rest_token(WP_REST_Request $req) {
     $token = $req->get_header('X-ADS-Token') ?: $req->get_param('_ads_token');
     if (!hash_equals(adsdefender_rest_token(), (string)$token)) {
@@ -207,17 +244,19 @@ function adsdefender_upsert_lockout(string $ip, string $source = 'matomo'): void
     global $wpdb;
     $table    = $wpdb->prefix . ADSDEFENDER_LOCKOUT_TABLE;
     $duration = max(1, (int)($opts['lockout_duration'] ?? 1440)); // phút
-    $expires  = gmdate('Y-m-d H:i:s', time() + $duration * 60);
 
+    // Mọi mốc thời gian của bảng lockout đều do MySQL tính (NOW()) — trước đây expires_at tính bằng
+    // gmdate (UTC) rồi so với NOW() (giờ MySQL, thường là +07 ở hosting VN) → lockout < 7 giờ hết hạn
+    // ngay khi vừa tạo, lockout 24h thực tế chỉ còn 17h.
     $wpdb->query($wpdb->prepare(
         "INSERT INTO `{$table}` (ip, source, lockout_count, first_seen, last_seen, expires_at, is_active)
-         VALUES (%s, %s, 1, NOW(), NOW(), %s, 1)
+         VALUES (%s, %s, 1, NOW(), NOW(), NOW() + INTERVAL %d MINUTE, 1)
          ON DUPLICATE KEY UPDATE
              lockout_count = lockout_count + 1,
              last_seen     = NOW(),
-             expires_at    = %s,
+             expires_at    = NOW() + INTERVAL %d MINUTE,
              is_active     = 1",
-        $ip, $source, $expires, $expires
+        $ip, $source, $duration, $duration
     ));
 
     adsdefender_maybe_permanent_ban($ip);
@@ -249,12 +288,12 @@ function adsdefender_maybe_permanent_ban(string $ip): void
     global $wpdb;
     $table = $wpdb->prefix . ADSDEFENDER_LOCKOUT_TABLE;
     $row   = $wpdb->get_row($wpdb->prepare(
-        "SELECT lockout_count, first_seen FROM `{$table}` WHERE ip = %s",
+        "SELECT lockout_count, TIMESTAMPDIFF(SECOND, first_seen, NOW()) AS age FROM `{$table}` WHERE ip = %s",
         $ip
     ));
     if (!$row) return;
 
-    $days_since = (time() - strtotime($row->first_seen)) / DAY_IN_SECONDS;
+    $days_since = max(0, (int) $row->age) / DAY_IN_SECONDS;   // tính trong MySQL — tránh lệch múi giờ PHP / MySQL
     if ((int)$row->lockout_count < $threshold || $days_since > $period) return;
 
     // Ban vĩnh viễn
@@ -500,7 +539,7 @@ function adsdefender_sync_now(): bool
 
 add_action('init', function () {
     adsdefender_check_ip();
-    adsdefender_capture_utm();
+    if (function_exists('adsdefender_capture_utm')) adsdefender_capture_utm();   // module Marketing
 }, 1);
 
 // ─── IP Protection ────────────────────────────────────────────────────────────
@@ -586,11 +625,16 @@ function adsdefender_get_real_ip(): string
             return $remote;
         }
     } elseif (!empty($opts['behind_proxy'])) {
-        $headers = ['HTTP_X_REAL_IP', 'REMOTE_ADDR'];
-        foreach ($headers as $h) {
-            $ip = trim($_SERVER[$h] ?? '');
+        // Chỉ tin X-Real-IP khi kết nối THỰC SỰ đến từ proxy (REMOTE_ADDR là proxy đáng tin).
+        // Trước đây tin header từ bất kỳ ai → kẻ tấn công gọi thẳng vào IP gốc của server với
+        // X-Real-IP tuỳ ý: né mọi lệnh chặn / brute force / rate limit (đổi IP mỗi request),
+        // mạo danh IP trong whitelist để né firewall, hoặc gán click ảo cho IP người khác để họ bị khoá.
+        $remote = trim($_SERVER['REMOTE_ADDR'] ?? '');
+        if (adsdefender_is_trusted_proxy($remote)) {
+            $ip = trim($_SERVER['HTTP_X_REAL_IP'] ?? '');
             if ($ip && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) return $ip;
         }
+        if ($remote && filter_var($remote, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) return $remote;
     } else {
         $ip = trim($_SERVER['REMOTE_ADDR'] ?? '');
         if ($ip && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) return $ip;
@@ -598,6 +642,18 @@ function adsdefender_get_real_ip(): string
     // Fallback không filter private (local/staging)
     $ip = trim($_SERVER['REMOTE_ADDR'] ?? '');
     return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '';
+}
+
+/**
+ * Proxy đáng tin: loopback / mạng nội bộ (proxy chạy cùng máy hoặc cùng LAN — nginx trước PHP-FPM,
+ * load balancer nội bộ) hoặc IP / CIDR admin khai báo ở "Proxy tin cậy" (CDN khác Cloudflare).
+ */
+function adsdefender_is_trusted_proxy(string $remote): bool
+{
+    if ($remote === '' || !filter_var($remote, FILTER_VALIDATE_IP)) return false;
+    if (!filter_var($remote, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) return true;
+    $list = adsdefender_parse_whitelist(adsdefender_settings()['trusted_proxies'] ?? '');
+    return $list && adsdefender_ip_matches($remote, $list);
 }
 
 function adsdefender_is_cloudflare_ip(string $ip): bool
@@ -692,121 +748,34 @@ function adsdefender_log_block(string $ip): void
 
 function adsdefender_block_visitor(string $action, array $opts): void
 {
-    // Solid Security pattern: đảm bảo cache plugin không cache trang blocked
-    if (!defined('DONOTCACHEPAGE'))   define('DONOTCACHEPAGE', true);
-    if (!defined('DONOTCACHEOBJECT')) define('DONOTCACHEOBJECT', true);
-    if (!defined('DONOTCACHEDB'))     define('DONOTCACHEDB', true);
-    nocache_headers();
-    do_action('litespeed_control_set_nocache', 'adsdefender_blocked');
-
+    $GLOBALS['adsdefender_block_reason'] = 'fraud';
     switch ($action) {
         case 'redirect':
-            wp_redirect($opts['redirect_url'] ?? home_url('/'), 302); exit;
-        case '403':
-            status_header(403);
-            echo adsdefender_403_page(); exit;
+            // Chỉ chuyển sang website KHÁC. URL trống hoặc trỏ về chính site này
+            // (vd. trang chủ) sẽ bị chặn lại ngay → vòng lặp redirect vô hạn,
+            // hoặc wp_redirect('') không làm gì → khách thấy trang trắng.
+            $url  = trim((string) ($opts['redirect_url'] ?? ''));
+            $host = strtolower((string) wp_parse_url($url, PHP_URL_HOST));
+            $self = strtolower((string) wp_parse_url(home_url('/'), PHP_URL_HOST));
+            if ($host !== '' && $host !== $self && preg_match('#^https?://#i', $url)) {
+                if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
+                nocache_headers();
+                header('X-Robots-Tag: noindex, nofollow', true);
+                wp_redirect($url, 302, 'AdsDefender');
+                exit;
+            }
+            adsdefender_block_response('fraud', 403);
+            break;
         case 'blank':
-            status_header(200);
-            echo '<html><body></body></html>'; exit;
+            if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
+            nocache_headers();
+            status_header(403);
+            header('X-Robots-Tag: noindex, nofollow', true);
+            echo '<!DOCTYPE html><html><head><meta name="robots" content="noindex,nofollow"></head><body></body></html>';
+            exit;
+        default:   // '403' — trang chặn (includes/block-page.php)
+            adsdefender_block_response('fraud', 403);
     }
-}
-
-function adsdefender_403_page(): string
-{
-    $ip         = adsdefender_get_real_ip() ?: ($_SERVER['REMOTE_ADDR'] ?? '');
-    $ua         = $_SERVER['HTTP_USER_AGENT'] ?? 'Không xác định';
-    $time       = (new DateTime('now', new DateTimeZone('Asia/Ho_Chi_Minh')))->format('H:i:s d/m/Y');
-    $host       = $_SERVER['HTTP_HOST'] ?? '';
-    $uri        = $_SERVER['REQUEST_URI'] ?? '/';
-    $referer    = $_SERVER['HTTP_REFERER'] ?? '';
-    $lang       = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
-    $ref_law_vn = 'Điều 15, 17 Nghị định 13/2023/NĐ-CP';
-    $ref_law_eu = 'GDPR Art. 5 & Computer Fraud and Abuse Act (CFAA)';
-
-    ob_start(); ?>
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Truy cập bị từ chối — Click fraud detected</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.wrap{max-width:680px;width:100%}
-.card{background:#1a1d27;border:1px solid #2d3148;border-radius:12px;padding:32px;margin-bottom:16px}
-.card.danger{border-color:#e53e3e;background:#1a0d0d}
-.badge{display:inline-flex;align-items:center;gap:6px;background:#e53e3e;color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;letter-spacing:.5px;margin-bottom:16px}
-h1{font-size:22px;font-weight:700;color:#fff;margin-bottom:8px}
-.sub{font-size:14px;color:#94a3b8;line-height:1.6;margin-bottom:0}
-.info-grid{display:grid;grid-template-columns:140px 1fr;gap:10px 16px;font-size:13px;margin-top:0}
-.info-grid .label{color:#64748b;font-weight:600;align-self:start;padding-top:2px}
-.info-grid .val{color:#e2e8f0;font-family:monospace;word-break:break-all}
-.val.highlight{color:#f87171;font-weight:700;font-size:15px}
-.section-title{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#475569;margin-bottom:12px}
-.law-box{background:#0f1117;border:1px solid #2d3148;border-radius:8px;padding:14px 16px;font-size:12px;color:#94a3b8;line-height:1.7}
-.law-box strong{color:#cbd5e1}
-.law-box ul{padding-left:16px;margin-top:6px}
-.pulse{display:inline-block;width:8px;height:8px;background:#e53e3e;border-radius:50%;margin-right:6px;animation:pulse 1.5s infinite}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
-.footer{text-align:center;font-size:11px;color:#334155;margin-top:8px}
-hr{border:none;border-top:1px solid #2d3148;margin:20px 0}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div class="card danger">
-    <div class="badge">🚨 CLICK FRAUD DETECTED</div>
-    <h1>Truy cập của bạn đã bị chặn</h1>
-    <p class="sub">Hệ thống phát hiện hành vi <strong style="color:#f87171">click gian lận quảng cáo</strong> từ thiết bị của bạn.
-    Toàn bộ thông tin phiên truy cập này đã được ghi lại và lưu trữ.</p>
-  </div>
-  <div class="card">
-    <div class="section-title"><span class="pulse"></span>Thông tin đã được ghi lại</div>
-    <div class="info-grid">
-      <span class="label">Địa chỉ IP</span>
-      <span class="val highlight"><?php echo htmlspecialchars($ip); ?></span>
-      <span class="label">Thời điểm</span>
-      <span class="val"><?php echo htmlspecialchars($time); ?> (GMT+7)</span>
-      <span class="label">Trang truy cập</span>
-      <span class="val"><?php echo htmlspecialchars($host . $uri); ?></span>
-      <?php if ($referer): ?>
-      <span class="label">Nguồn truy cập</span>
-      <span class="val"><?php echo htmlspecialchars($referer); ?></span>
-      <?php endif; ?>
-      <span class="label">Trình duyệt</span>
-      <span class="val"><?php echo htmlspecialchars(substr($ua, 0, 120)); ?></span>
-      <?php if ($lang): ?>
-      <span class="label">Ngôn ngữ</span>
-      <span class="val"><?php echo htmlspecialchars($lang); ?></span>
-      <?php endif; ?>
-    </div>
-  </div>
-  <div class="card">
-    <div class="section-title">⚖️ Cơ sở pháp lý</div>
-    <div class="law-box">
-      <strong>Hành vi click fraud quảng cáo có thể bị xử lý theo:</strong>
-      <ul>
-        <li><strong>Việt Nam:</strong> <?php echo $ref_law_vn; ?> về bảo vệ dữ liệu cá nhân và hành vi gian lận thương mại điện tử. Mức phạt hành chính từ 10 - 70 triệu đồng; hình sự nếu gây thiệt hại lớn.</li>
-        <li><strong>Quốc tế:</strong> <?php echo $ref_law_eu; ?> — áp dụng với hành vi truy cập hệ thống máy tính trái phép và gian lận quảng cáo trực tuyến.</li>
-        <li><strong>Google Ads Policy:</strong> Vi phạm chính sách lưu lượng không hợp lệ của Google — có thể dẫn đến khóa tài khoản Google Ads của người thực hiện.</li>
-      </ul>
-    </div>
-    <hr>
-    <p style="font-size:13px;color:#94a3b8;line-height:1.7">
-      Nếu bạn cho rằng đây là nhầm lẫn, hãy liên hệ quản trị viên website cùng địa chỉ IP
-      <strong style="color:#e2e8f0"><?php echo htmlspecialchars($ip); ?></strong>
-      để được xem xét gỡ chặn.
-    </p>
-  </div>
-  <div class="footer">
-    Được bảo vệ bởi AdsDefender &nbsp;·&nbsp; Mã sự kiện: <?php echo strtoupper(substr(md5($ip . $time), 0, 12)); ?>
-  </div>
-</div>
-</body>
-</html>
-<?php
-    return ob_get_clean();
 }
 
 // ─── Visitor Blacklist ────────────────────────────────────────────────────────
@@ -895,134 +864,17 @@ function adsdefender_is_visitor_blocked(string $visitor_id): bool
     return isset($map[strtolower($visitor_id)]);
 }
 
-// ─── Static blocked page ─────────────────────────────────────────────────────
-//
-// Tạo file HTML tĩnh /adsdefender-blocked.html trong thư mục gốc WP.
-// File tĩnh không qua PHP, không qua block rules của .htaccess → không bị loop.
-// ErrorDocument 403 /adsdefender-blocked.html
-// Plugin tự tạo file và tự điền lock_url khi cần.
-
-function adsdefender_create_blocked_html(): void
-{
-    $file = ABSPATH . 'adsdefender-blocked.html';
-    $html = adsdefender_403_page_static();
-    file_put_contents($file, $html, LOCK_EX);
-}
-
-function adsdefender_ensure_lock_url(): void
-{
-    $opts     = adsdefender_settings();
-    $lock_url = trim($opts['lock_url'] ?? '');
-    $file_url = '/adsdefender-blocked.html';
-    $html_file = ABSPATH . 'adsdefender-blocked.html';
-
-    $need_html   = !file_exists($html_file);
-    // Chỉ cần set khi: trống, hoặc còn là URL cũ không phải path tĩnh đúng
-    $need_url    = empty($lock_url) || ($lock_url !== $file_url && strpos($lock_url, 'adsdefender-blocked') !== false && strpos($lock_url, '.html') === false);
-
-    // Tạo file tĩnh nếu chưa có
-    if ($need_html) {
-        adsdefender_create_blocked_html();
-    }
-
-    if ($need_url) {
-        $opts['lock_url'] = $file_url;
-        update_option('adsdefender_settings', $opts);
-        adsdefender_settings(true);
-    }
-}
-
-add_action('wp_loaded', 'adsdefender_ensure_lock_url');
-
-// Tái tạo file tĩnh khi plugin sync (nội dung có thể thay đổi theo version)
-add_action(ADSDEFENDER_CRON_HOOK, 'adsdefender_create_blocked_html', 5);
-
-function adsdefender_403_page_static(): string
-{
-    // Phiên bản static — không có PHP variables (IP, time...)
-    // Dùng JS để hiển thị thông tin client-side
-    ob_start(); ?>
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Truy cập tạm thời bị hạn chế</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-html{font-size:16px}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#f8f9fb;color:#1a1a2e;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;line-height:1.6}
-.container{max-width:560px;width:100%;text-align:center}
-.icon-wrap{margin-bottom:28px}
-.icon-wrap svg{width:56px;height:56px;opacity:.85}
-.code{font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#8b9cb0;margin-bottom:12px}
-h1{font-size:28px;font-weight:700;color:#1a1a2e;margin-bottom:12px;letter-spacing:-.3px;line-height:1.25}
-.desc{font-size:15px;color:#5a6478;max-width:420px;margin:0 auto 32px}
-.divider{height:1px;background:#e4e8ef;margin:28px 0}
-.meta{display:flex;flex-direction:column;gap:8px;text-align:left;background:#fff;border:1px solid #e4e8ef;border-radius:10px;padding:18px 20px;margin-bottom:28px}
-.meta-row{display:flex;gap:12px;font-size:13px}
-.meta-label{color:#8b9cb0;min-width:90px;font-weight:500;flex-shrink:0}
-.meta-val{color:#374151;font-family:'SF Mono',SFMono-Regular,Consolas,monospace;word-break:break-all;font-size:12px}
-.notice{font-size:13px;color:#8b9cb0;line-height:1.7}
-.notice a{color:#5a6478;text-decoration:underline;text-underline-offset:3px}
-.footer{margin-top:36px;font-size:11px;color:#c0c8d4;letter-spacing:.5px}
-.promo{margin-top:20px;padding-top:20px;border-top:1px solid #e9ecf0;font-size:12px;color:#a0aab8}
-.promo a{color:#5a7fc4;text-decoration:none;font-weight:600}
-.promo a:hover{text-decoration:underline}
-</style>
-</head>
-<body>
-<div class="container">
-  <div class="icon-wrap">
-    <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="28" cy="28" r="27" stroke="#d1d9e6" stroke-width="2"/>
-      <path d="M28 16v14" stroke="#8b9cb0" stroke-width="2.5" stroke-linecap="round"/>
-      <circle cx="28" cy="37" r="1.5" fill="#8b9cb0"/>
-    </svg>
-  </div>
-  <div class="code">403 — Truy cập bị hạn chế</div>
-  <h1>Không thể tải trang này</h1>
-  <p class="desc">Truy cập từ địa chỉ IP này tạm thời bị hạn chế.</p>
-
-  <div class="meta">
-    <div class="meta-row">
-      <span class="meta-label">Thời điểm</span>
-      <span class="meta-val" id="ts">—</span>
-    </div>
-    <div class="meta-row">
-      <span class="meta-label">Trang web</span>
-      <span class="meta-val" id="host">—</span>
-    </div>
-    <div class="meta-row">
-      <span class="meta-label">Trình duyệt</span>
-      <span class="meta-val" id="ua">—</span>
-    </div>
-  </div>
-
-  <p class="notice">Nếu đây là nhầm lẫn, vui lòng liên hệ quản trị viên website<br>để được hỗ trợ gỡ hạn chế.</p>
-  <div class="footer">Bảo vệ bởi AdsDefender</div>
-  <div class="promo">
-    Bạn đang chạy Google Ads? <a href="https://saigon.pro" target="_blank" rel="noopener">saigon.pro</a> cung cấp dịch vụ chặn click ảo, bad click tự động — bảo vệ ngân sách quảng cáo hiệu quả.
-  </div>
-</div>
-<script>
-var n=new Date();
-document.getElementById('ts').textContent=n.toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit',day:'2-digit',month:'2-digit',year:'numeric'});
-document.getElementById('host').textContent=location.hostname;
-document.getElementById('ua').textContent=navigator.userAgent.slice(0,100);
-</script>
-</body>
-</html>
-<?php
-    return ob_get_clean();
-}
-
 // ─── REST: sync trigger ────────────────────────────────────────────────────────
 
 add_action('rest_api_init', function () {
     register_rest_route('adsdefender/v1', '/sync', [
         'methods'             => 'POST',
         'callback'            => function () {
+            // Tối đa 1 lần / phút — mỗi lần sync là 1 request ra máy chủ Matomo kèm secret
+            if (get_transient('adsdefender_sync_rl')) {
+                return new WP_Error('adsdefender_rate_limited', 'Too many requests', ['status' => 429]);
+            }
+            set_transient('adsdefender_sync_rl', 1, MINUTE_IN_SECONDS);
             $ok = adsdefender_sync_now();
             if (!$ok) {
                 return new WP_Error('adsdefender_sync_failed',
@@ -1036,7 +888,7 @@ add_action('rest_api_init', function () {
                 'visitors' => count(get_option(ADSDEFENDER_OPTION_VISITORS, [])),
             ];
         },
-        'permission_callback' => 'adsdefender_verify_rest_token',
+        'permission_callback' => 'adsdefender_verify_sync_token',
     ]);
 });
 

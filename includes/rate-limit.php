@@ -1,4 +1,8 @@
 <?php
+/*
+ * AdsDefender — Copyright (c) 2026 saigon.pro — https://saigon.pro
+ * Ủng hộ tác giả (Donate): https://www.paypal.com/paypalme/dangngocsoncom
+ */
 /**
  * AdsDefender — Rate Limiting
  *
@@ -111,15 +115,7 @@ function adsdefender_rate_limit_check(): void
         adsdefender_log_block($ip);
         adsdefender_sec_log('rate_limit', $ip, "{$count} req / {$cfg['window_secs']}s");
 
-        if (!defined('DONOTCACHEPAGE'))   define('DONOTCACHEPAGE', true);
-        if (!defined('DONOTCACHEOBJECT')) define('DONOTCACHEOBJECT', true);
-        nocache_headers();
-
-        http_response_code(429);
-        header('Retry-After: ' . ($cfg['lockout_mins'] * 60));
-        header('Content-Type: text/plain; charset=utf-8');
-        echo '429 Too Many Requests. Please slow down.';
-        exit;
+        adsdefender_block_response('rate_limit', 429, $cfg['lockout_mins'] * 60);
     }
 }
 

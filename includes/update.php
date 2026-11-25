@@ -1,4 +1,8 @@
 <?php
+/*
+ * AdsDefender — Copyright (c) 2026 saigon.pro — https://saigon.pro
+ * Ủng hộ tác giả (Donate): https://www.paypal.com/paypalme/dangngocsoncom
+ */
 if (!defined('ABSPATH')) exit;
 
 function adsdefender_fetch_update_info(): ?array
@@ -108,7 +112,7 @@ add_filter('plugins_api', function ($result, $action, $args) {
     ];
 }, 10, 3);
 
-// ─── 1-click update từ tab Hệ thống → Cập nhật ───────────────────────────────
+// ─── 1-click update từ tab Cài đặt chung → Cập nhật ───────────────────────────────
 
 add_action('admin_post_adsdefender_do_update', function () {
     if (!current_user_can('update_plugins')) wp_die('Forbidden');
@@ -177,7 +181,7 @@ add_action('admin_post_adsdefender_do_update', function () {
 
 function adsdefender_update_redirect(string $status, string $version = ''): string
 {
-    $args = ['page' => 'adsdefender-system', 'tab' => 'update', 'update' => $status];
+    $args = ['page' => 'adsdefender-settings', 'tab' => 'update', 'update' => $status];
     if ($version) $args['new_version'] = $version;
     return add_query_arg($args, admin_url('admin.php'));
 }

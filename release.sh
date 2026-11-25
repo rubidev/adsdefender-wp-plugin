@@ -38,16 +38,18 @@ git rev-parse "$TAG" >/dev/null 2>&1 && { echo "Tag $TAG đã tồn tại"; exit
 
 echo "→ Phát hành $TAG"
 
-# ── 2. Sinh adsdefender-update.json từ header của plugin ─────────────────────
+# ── 2. Sinh adsdefender-update.json từ CHANGELOG.md ──────────────────────────
+# Changelog để ngoài file PHP: nó chứa nhiều từ khoá kỹ thuật bảo mật khiến
+# scanner malware trên cPanel (ImunifyAV/ClamAV/Maldet) báo nhầm adsdefender.php.
 python - "$VER" <<'PYEOF'
 import re, io, json, sys
 ver = sys.argv[1]
-src = io.open('adsdefender.php', encoding='utf-8').read()
-block = re.search(r'CHANGELOG.*?═+\n(.*?)\n\s*\*/', src, re.S)
+src = io.open('CHANGELOG.md', encoding='utf-8').read()
+block = re.search(r'```text\n(.*?)\n```', src, re.S)
 lines = []
 if block:
     for l in block.group(1).split('\n'):
-        l = re.sub(r'^\s*\*\s?', '', l).rstrip()
+        l = l.rstrip()
         if l.strip(): lines.append(l)
         if len(lines) >= 16: break
 base = "https://github.com/rubidev/adsdefender-wp-plugin"
@@ -77,6 +79,7 @@ git archive "$TAG" | tar -x -C "$BUILD/adsdefender"
 # Loại các file chỉ phục vụ phát triển, không thuộc plugin
 rm -f "$BUILD/adsdefender/.gitignore" \
       "$BUILD/adsdefender/release.sh" \
+      "$BUILD/adsdefender/CHANGELOG.md" \
       "$BUILD/adsdefender/adsdefender-update.json"
 
 ( cd "$BUILD" && 7z a -tzip -mx=9 "$ZIP" adsdefender >/dev/null )

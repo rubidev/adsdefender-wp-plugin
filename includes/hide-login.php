@@ -1,4 +1,8 @@
 <?php
+/*
+ * AdsDefender — Copyright (c) 2026 saigon.pro — https://saigon.pro
+ * Ủng hộ tác giả (Donate): https://www.paypal.com/paypalme/dangngocsoncom
+ */
 /**
  * AdsDefender — Hide Login URL
  *
@@ -121,25 +125,9 @@ function adsdefender_hl_block_access(): void
     // Có valid token/cookie → cho qua
     if (adsdefender_hl_is_validated()) return;
 
-    // Redirect về trang blocked (giống block_visitor trong core.php)
-    $opts     = adsdefender_settings();
-    $lock_url = trim($opts['lock_url'] ?? '/adsdefender-blocked.html');
-    if (empty($lock_url)) $lock_url = '/adsdefender-blocked.html';
-
-    nocache_headers();
-    if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
-
-    // Nếu là file HTML tĩnh → redirect về đó (tránh loop)
-    $current = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
-    if ($current !== $lock_url) {
-        header('Location: ' . $lock_url, true, 302);
-        exit;
-    }
-
-    // Đang ở chính trang lock_url mà vẫn gọi block → trả 403 fallback
-    status_header(403);
-    echo '<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>403 Forbidden</title></head><body><h1>403 Forbidden</h1></body></html>';
-    exit;
+    // Trả 404 tại chỗ như một trang không tồn tại — không redirect (redirect
+    // tới trang chặn cho kẻ dò biết là có trang đăng nhập ẩn ở đâu đó)
+    adsdefender_block_response('not_found', 404);
 }
 
 // ─── Serve wp-login.php tại slug — không redirect, không lộ URL ──────────────
