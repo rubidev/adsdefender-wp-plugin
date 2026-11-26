@@ -217,11 +217,26 @@ add_action('setup_theme', function () {
 
 function adsdefender_hl_handle_login_page(): void
 {
-    $action = $_REQUEST['action'] ?? '';
+    $action = (string) ($_REQUEST['action'] ?? '');
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-    // POST → luôn cho qua (login submit, password reset submit, postpass)
-    if ($method === 'POST') return;
+    // Actions WordPress cần wp-login.php trực tiếp không qua slug
+    $allowed_actions = ['logout', 'rp', 'resetpass', 'validateresetkey', 'lostpassword', 'postpass'];
+
+    // POST: chỉ cho qua các action trên (postpass — form trang có mật khẩu ở ngoài website;
+    // lostpassword / resetpass). POST ĐĂNG NHẬP phải có cookie của URL ẩn (người thật mở
+    // form qua slug nên luôn có). Trước đây mọi POST đều được cho qua → botnet POST thẳng
+    // vào wp-login.php dò mật khẩu mà Hide Login không chặn được.
+    if ($method === 'POST') {
+        if (in_array($action, $allowed_actions, true) && $action !== 'logout') return;
+        if (is_user_logged_in() || adsdefender_hl_is_validated()) return;
+        if (function_exists('adsdefender_sec_log')) {
+            adsdefender_sec_log('brute_force', adsdefender_get_real_ip(),
+                'hide_login | POST wp-login.php không qua URL ẩn | user=' . substr(sanitize_user(wp_unslash((string) ($_POST['log'] ?? ''))), 0, 60));
+        }
+        adsdefender_hl_block_access();
+        return;
+    }
 
     // User đã login → cho qua
     if (is_user_logged_in()) return;
@@ -229,8 +244,6 @@ function adsdefender_hl_handle_login_page(): void
     // Có valid token hoặc cookie → cho qua
     if (adsdefender_hl_is_validated()) return;
 
-    // Actions WordPress cần wp-login.php trực tiếp không qua slug
-    $allowed_actions = ['logout', 'rp', 'resetpass', 'validateresetkey', 'lostpassword', 'postpass'];
     if (in_array($action, $allowed_actions, true)) {
         // logout cần nonce hợp lệ
         if ($action === 'logout' && empty($_GET['_wpnonce'])) {

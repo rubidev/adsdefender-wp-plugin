@@ -536,12 +536,22 @@ function adsdefender_cf_detect(int $row_id, string $ip, string $kind, string $cf
 }
 
 /**
- * Danh sách IP nên loại trừ trong Google Ads (Cài đặt chiến dịch → Loại trừ IP, tối đa 500 / chiến dịch):
- * IP bị khoá / ban (do Matomo, click ảo tại chỗ, thủ công) gần đây nhất trước. Chỉ IP đơn hợp lệ.
+ * Danh sách IP nên loại trừ trong Google Ads (Cài đặt chiến dịch → Loại trừ IP, tối đa 500 / chiến dịch).
+ * CHỈ gồm IP có dấu hiệu click quảng cáo — loại trừ IP chưa từng thấy quảng cáo không có tác dụng gì
+ * mà còn chiếm chỗ trong giới hạn 500:
+ *   1. Click ảo phát hiện tại site (cột fraud — chỉ chạy trên lượt vào từ quảng cáo)
+ *   2. IP Matomo đánh dấu click ảo (danh sách đồng bộ) + lockout nguồn matomo / clickfraud trong N ngày
+ *   3. IP chặn thủ công / ban vĩnh viễn — chỉ khi IP đó từng vào từ quảng cáo (Live Traffic)
+ * KHÔNG gồm IP bị khoá vì firewall, quét 404, dò mật khẩu, rate limit, honeypot: đó là bot quét web,
+ * không bấm quảng cáo. Mới nhất trước, bỏ IP whitelist, chỉ IP đơn hợp lệ.
+ * Trả về ['ips' => […], 'total' => số IP hợp lệ, 'skipped' => số IP bị chặn nhưng không liên quan quảng cáo].
  */
 function adsdefender_cf_export_ips(int $days = 30, int $limit = 500): array
 {
     global $wpdb;
+    $tt  = $wpdb->prefix . ADSDEFENDER_TRAFFIC_TABLE;
+    $lt  = $wpdb->prefix . ADSDEFENDER_LOCKOUT_TABLE;
+    $ads = "('google_ads','meta_ads','tiktok_ads','ads')";
     $out = [];
     $add = function ($ip) use (&$out) {
         $ip = trim((string) $ip);
@@ -549,17 +559,26 @@ function adsdefender_cf_export_ips(int $days = 30, int $limit = 500): array
     };
     $suppress = $wpdb->suppress_errors(true);
     // 1. Click ảo phát hiện tại chỗ (mới nhất trước)
-    foreach ((array) $wpdb->get_col("SELECT ip FROM `{$wpdb->prefix}" . ADSDEFENDER_TRAFFIC_TABLE . "` WHERE fraud <> '' GROUP BY ip ORDER BY MAX(id) DESC") as $ip) $add($ip);
-    // 2. Lockout (Matomo + click ảo) trong N ngày
+    foreach ((array) $wpdb->get_col("SELECT ip FROM `{$tt}` WHERE fraud <> '' AND via = 0 AND source IN {$ads} GROUP BY ip ORDER BY MAX(id) DESC") as $ip) $add($ip);
+    // 2. Lockout do click ảo (Matomo / tại chỗ) trong N ngày
     foreach ((array) $wpdb->get_col($wpdb->prepare(
-        "SELECT ip FROM `{$wpdb->prefix}" . ADSDEFENDER_LOCKOUT_TABLE . "` WHERE last_seen >= NOW() - INTERVAL %d DAY ORDER BY last_seen DESC", $days)) as $ip) $add($ip);
+        "SELECT ip FROM `{$lt}` WHERE source IN ('matomo','clickfraud') AND last_seen >= NOW() - INTERVAL %d DAY ORDER BY last_seen DESC", $days)) as $ip) $add($ip);
+    // IP từng vào từ quảng cáo (trong thời gian giữ log Live Traffic) — bằng chứng cho IP chặn thủ công
+    $ad_ips = array_flip((array) $wpdb->get_col("SELECT DISTINCT ip FROM `{$tt}` WHERE via = 0 AND source IN {$ads}"));
     $wpdb->suppress_errors($suppress);
-    // 3. Ban vĩnh viễn / thủ công (mới thêm trước)
-    foreach (array_reverse(adsdefender_get_manual_ips()) as $m) $add($m['ip'] ?? '');
-    $wl = adsdefender_parse_whitelist(adsdefender_settings()['whitelist'] ?? '');
-    $ips = array_keys($out);
-    if ($wl) $ips = array_values(array_filter($ips, fn($ip) => !adsdefender_ip_matches($ip, $wl)));
-    return ['ips' => array_slice($ips, 0, $limit), 'total' => count($ips)];
+    // 2b. Danh sách Matomo đánh dấu click ảo (đồng bộ gần nhất)
+    foreach ((array) get_option(ADSDEFENDER_OPTION_IPS, []) as $ip) $add($ip);
+    // 3. Chặn thủ công / ban vĩnh viễn (mới thêm trước) — chỉ IP có click quảng cáo
+    $skipped = [];
+    foreach (array_reverse(adsdefender_get_manual_ips()) as $m) {
+        $ip = trim((string) ($m['ip'] ?? ''));
+        if ($ip === '' || isset($out[$ip])) continue;
+        if (isset($ad_ips[$ip])) $add($ip); elseif (filter_var($ip, FILTER_VALIDATE_IP)) $skipped[$ip] = true;
+    }
+    $wl  = adsdefender_parse_whitelist(adsdefender_settings()['whitelist'] ?? '');
+    $ips = array_values(array_filter(array_keys($out), fn($ip) => !adsdefender_is_temp_whitelisted($ip)
+                                                           && !($wl && adsdefender_ip_matches($ip, $wl))));
+    return ['ips' => array_slice($ips, 0, $limit), 'total' => count($ips), 'skipped' => count($skipped)];
 }
 
 add_action('admin_post_adsdefender_cf_export', function () {
@@ -1033,6 +1052,7 @@ add_action('wp_ajax_adsdefender_lt_action', function () {
     if ($do === 'block') {
         $mine = adsdefender_get_real_ip();
         if ($mine && $mine === $ip) wp_send_json_error('Đây là IP của chính bạn — không chặn.');
+        if (adsdefender_is_temp_whitelisted($ip)) wp_send_json_error('Đây là IP của quản trị viên — không chặn.');
         $manual = adsdefender_get_manual_ips();
         if (in_array($ip, array_column($manual, 'ip'), true)) wp_send_json_success(['msg' => 'IP đã nằm trong danh sách chặn']);
         $manual[] = ['ip' => $ip, 'note' => 'Live Traffic', 'added' => current_time('mysql')];

@@ -120,6 +120,11 @@ add_filter('authenticate', function ($user, $username, $password) {
     $ip  = adsdefender_get_real_ip();
     $cfg = adsdefender_bf_opts();
 
+    // IP quản trị / whitelist: không khoá. Không có dòng này thì botnet dò đủ 10 lần username
+    // của admin là chính admin cũng bị khoá đăng nhập dù đang ở IP quen.
+    $wl = adsdefender_parse_whitelist(adsdefender_settings()['whitelist'] ?? '');
+    if ($ip && (adsdefender_is_temp_whitelisted($ip) || ($wl && adsdefender_ip_matches($ip, $wl)))) return $user;
+
     // Kiểm tra IP/username đã vượt ngưỡng → lockout ngay, không cần record thêm
     if (adsdefender_bf_check($ip, $username)) {
         $lockout_mins = $cfg['lockout_mins'];

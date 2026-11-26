@@ -9,7 +9,8 @@ if (!defined('ABSPATH')) exit;
 // Menu quản trị AdsDefender
 //
 //   📊 Tổng quan          adsdefender            admin/pages/dashboard.php
-//   🎯 Chống Click Fraud  adsdefender-fraud      admin/pages/fraud.php      (gồm Live Traffic)
+//   📡 Live Traffic       adsdefender-live       admin/pages/fraud.php      (adsdefender_fraud_tab_live)
+//   🎯 Chống Click Fraud  adsdefender-fraud      admin/pages/fraud.php
 //   🛡 Bảo mật            adsdefender-security   admin/pages/security.php   (module security)
 //   🚀 Marketing          adsdefender-marketing  admin/pages/marketing.php  (module marketing)
 //   ⚙️ Cài đặt chung      adsdefender-settings   admin/pages/settings.php
@@ -37,6 +38,7 @@ add_action('admin_menu', function () {
         'manage_options', 'adsdefender', 'adsdefender_page_dashboard', 'dashicons-shield', 80);
 
     add_submenu_page('adsdefender', 'Tổng quan',         '📊 Tổng quan',                      'manage_options', 'adsdefender',           'adsdefender_page_dashboard');
+    add_submenu_page('adsdefender', 'Live Traffic',      '📡 Live Traffic',                   'manage_options', 'adsdefender-live',      'adsdefender_page_live');
     add_submenu_page('adsdefender', 'Chống Click Fraud', '🎯 Chống Click Fraud' . $log_badge, 'manage_options', 'adsdefender-fraud',     'adsdefender_page_fraud');
     if (adsdefender_module_enabled('security')) {
         add_submenu_page('adsdefender', 'Bảo mật',       '🛡 Bảo mật',                        'manage_options', 'adsdefender-security',  'adsdefender_page_security');
@@ -57,13 +59,22 @@ function adsdefender_page_fraud(): void
 
     adsdefender_render_tabbed_page('adsdefender-fraud', '🎯 AdsDefender — Chống Click Fraud', [
         'connect'   => ['🔗 Kết nối & Hành động', 'adsdefender_fraud_tab_connect'],
-        'live'      => ['📡 Live Traffic',        'adsdefender_fraud_tab_live'],
         'log'       => ['🚫 Block Log' . adsdefender_menu_badge(adsdefender_unread_log_count()), 'adsdefender_page_log'],
         'manual'    => ['✋ Block thủ công',      'adsdefender_page_manual'],
         'whitelist' => ['✅ Whitelist',           'adsdefender_page_whitelist'],
         'groups'    => ['🔗 Cross-site',          'adsdefender_fraud_tab_groups'],
         'tools'     => ['🧪 Sync & Kiểm tra',     'adsdefender_fraud_tab_tools'],
     ], $default);
+}
+
+// ─── 📡 Live Traffic ──────────────────────────────────────────────────────────
+
+function adsdefender_page_live(): void
+{
+    echo '<div class="wrap"><h1>📡 AdsDefender — Live Traffic</h1>';
+    settings_errors();
+    adsdefender_fraud_tab_live();
+    echo '</div>';
 }
 
 // ─── 🛡 Bảo mật ───────────────────────────────────────────────────────────────

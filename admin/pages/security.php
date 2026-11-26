@@ -225,6 +225,42 @@ function adsdefender_security_tab_login(): void
                 <p class="description">Chỉ tắt nếu không dùng XML-RPC (Jetpack, WP Mobile app cần XML-RPC).</p>
             </td>
         </tr>
+        <?php if (function_exists('adsdefender_lg_check')):
+            $lgd = get_option(ADSDEFENDER_LG_OPTION, []);
+            $my_ip = adsdefender_get_real_ip();
+            [$my_ok, $my_why] = adsdefender_lg_check($my_ip); ?>
+        <tr id="login-geo">
+            <th>🇻🇳 Chỉ đăng nhập từ Việt Nam</th>
+            <td>
+                <label><input type="checkbox" name="adsdefender_settings[lg_vn_only]" value="1"
+                    <?php checked(!empty($opts['lg_vn_only'])); ?>>
+                Chỉ IP Việt Nam (và proxy Google / Cloudflare) mở được trang đăng nhập &amp; đăng nhập tài khoản quản trị</label>
+                <p class="description">Chặn botnet nước ngoài dò mật khẩu. Áp dụng cho wp-login.php, URL ẩn, XML-RPC, Application Password; tài khoản quản trị / biên tập
+                    đăng nhập qua form khác (WooCommerce…) từ nước ngoài cũng bị từ chối — khách mua hàng nước ngoài vẫn đăng nhập bình thường.<br>
+                    Danh sách IP Việt Nam lấy từ APNIC (cập nhật hằng tuần), tra ngay trên máy chủ — không gọi API ngoài mỗi lần đăng nhập.
+                    Đi nước ngoài: thêm IP vào <b>Whitelist</b>. Bị khoá ngoài ý muốn: thêm <code>define('ADSDEFENDER_NO_COUNTRY_LOCK', true);</code> vào wp-config.php.</p>
+                <p style="margin-top:6px">IP của bạn: <code><?php echo esc_html($my_ip); ?></code>
+                    <?php if (empty($lgd['v4h'])): ?><span style="color:#996800">— chưa tải danh sách (sẽ tải khi bật)</span>
+                    <?php elseif ($my_ok): ?><span style="color:#00a32a;font-weight:600">✓ được phép (<?php echo esc_html($my_why); ?>)</span>
+                    <?php else: ?><span style="color:#d63638;font-weight:600">✗ không được phép — không thể bật</span><?php endif; ?>
+                    <?php if (!empty($lgd['updated'])): ?><br><span class="description">Danh sách: <?php echo (int) ($lgd['vn_count'] ?? 0); ?> dải IP Việt Nam,
+                        cập nhật <?php echo esc_html(human_time_diff((int) $lgd['updated'])); ?> trước.</span><?php endif; ?>
+                    <?php if (!empty($lgd['error'])): ?><br><span style="color:#d63638">⚠ <?php echo esc_html($lgd['error']); ?></span><?php endif; ?>
+                    <br><button type="button" class="button button-small" id="ads-lg-sync" style="margin-top:4px">↻ Tải lại danh sách</button> <span id="ads-lg-msg"></span>
+                </p>
+                <script>
+                document.getElementById('ads-lg-sync').addEventListener('click', function () {
+                    var b = this, m = document.getElementById('ads-lg-msg'), fd = new FormData();
+                    fd.append('action', 'adsdefender_lg_sync'); fd.append('nonce', <?php echo wp_json_encode(wp_create_nonce('adsdefender_lg_sync')); ?>);
+                    b.disabled = true; m.textContent = '⏳ Đang tải…';
+                    fetch(ajaxurl, {method: 'POST', body: fd, credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (res) {
+                        b.disabled = false; m.textContent = res.success ? '✅ ' + res.data.count + ' dải IP Việt Nam' : '❌ ' + res.data;
+                    }).catch(function () { b.disabled = false; m.textContent = '❌ Lỗi kết nối'; });
+                });
+                </script>
+            </td>
+        </tr>
+        <?php endif; ?>
     </table>
 
     <h3 style="font-size:14px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid #eee">🍯 Honeypot</h3>

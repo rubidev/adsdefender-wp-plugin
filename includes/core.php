@@ -473,28 +473,68 @@ function adsdefender_bot_rdns_confirm(string $ip, array $suffixes): bool
     return is_array($ips) && in_array($ip, $ips, true);
 }
 
-// ─── Temp Whitelist (Admin IP tự động) ───────────────────────────────────────
+// ─── IP quản trị (whitelist tự động) ─────────────────────────────────────────
+//
+// IP của quản trị viên (manage_options) KHÔNG BAO GIỜ bị chặn: mọi điểm chặn (firewall,
+// rate limit, quét 404, honeypot, brute force, Threat Intel, click ảo, danh sách chặn,
+// chỉ-đăng-nhập-từ-VN) đều gọi adsdefender_is_temp_whitelisted().
+//  • Ghi khi admin dùng site (init) VÀ ngay lúc đăng nhập thành công (wp_login)
+//  • Nhớ 30 ngày kể từ lần cuối dùng — admin quay lại sau vài ngày, trước khi đăng nhập
+//    (lúc dễ bị chặn nhất: trang đăng nhập) vẫn được bảo vệ. Bản cũ chỉ nhớ 24 giờ.
+//  • Ghi IP mới → gỡ luôn lockout / chặn thủ công đang có của IP đó (bị chặn nhầm trước đó)
+
+define('ADSDEFENDER_ADMIN_IP_DAYS', 30);
 
 function adsdefender_is_temp_whitelisted(string $ip): bool
 {
     $whitelist = get_option('adsdefender_temp_whitelist', []);
-    return isset($whitelist[$ip]) && $whitelist[$ip] > time();
+    return is_array($whitelist) && isset($whitelist[$ip]) && $whitelist[$ip] > time();
+}
+
+/** Danh sách IP quản trị còn hiệu lực [ip => hết hạn] */
+function adsdefender_admin_ips(): array
+{
+    $w = get_option('adsdefender_temp_whitelist', []);
+    return is_array($w) ? array_filter($w, fn($e) => $e > time()) : [];
+}
+
+function adsdefender_remember_admin_ip(string $ip, bool $force = false): void
+{
+    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) return;
+    $whitelist = adsdefender_admin_ips();
+    $expiry    = time() + ADSDEFENDER_ADMIN_IP_DAYS * DAY_IN_SECONDS;
+    // Gia hạn tối đa 1 lần / giờ (tránh ghi option mỗi request)
+    if (!$force && isset($whitelist[$ip]) && $whitelist[$ip] > $expiry - HOUR_IN_SECONDS) return;
+    $is_new = !isset($whitelist[$ip]);
+    $whitelist[$ip] = $expiry;
+    update_option('adsdefender_temp_whitelist', $whitelist, false);
+    if ($is_new) adsdefender_unblock_ip($ip);
+}
+
+/** Gỡ mọi chặn đang có của 1 IP: lockout + danh sách chặn thủ công */
+function adsdefender_unblock_ip(string $ip): void
+{
+    global $wpdb;
+    $suppress = $wpdb->suppress_errors(true);
+    $wpdb->query($wpdb->prepare("UPDATE `{$wpdb->prefix}" . ADSDEFENDER_LOCKOUT_TABLE . "` SET is_active = 0 WHERE ip = %s", $ip));
+    $wpdb->suppress_errors($suppress);
+    $manual = adsdefender_get_manual_ips();
+    $keep   = array_values(array_filter($manual, fn($m) => ($m['ip'] ?? '') !== $ip));
+    if (count($keep) !== count($manual)) update_option(ADSDEFENDER_OPTION_MANUAL, $keep, false);
 }
 
 // Priority 0 — trước check_ip (priority 1)
 add_action('init', function () {
     if (!is_user_logged_in() || !current_user_can('manage_options')) return;
-    $ip = adsdefender_get_real_ip();
-    if (!$ip) return;
-    $whitelist = get_option('adsdefender_temp_whitelist', []);
-    $expiry    = time() + DAY_IN_SECONDS;
-    // Refresh chỉ khi còn < 1h
-    if (isset($whitelist[$ip]) && $whitelist[$ip] > $expiry - HOUR_IN_SECONDS) return;
-    // Dọn entries hết hạn
-    $whitelist = array_filter($whitelist, fn($e) => $e > time());
-    $whitelist[$ip] = $expiry;
-    update_option('adsdefender_temp_whitelist', $whitelist, false);
+    adsdefender_remember_admin_ip(adsdefender_get_real_ip());
 }, 0);
+
+// Ngay lúc đăng nhập thành công (request đăng nhập chưa có phiên → init ở trên chưa bắt được)
+add_action('wp_login', function ($login, $user) {
+    if ($user instanceof WP_User && user_can($user, 'manage_options')) {
+        adsdefender_remember_admin_ip(adsdefender_get_real_ip(), true);
+    }
+}, 5, 2);
 
 // ─── Telegram ─────────────────────────────────────────────────────────────────
 
@@ -808,6 +848,7 @@ function adsdefender_block_reason_label(string $reason): string
         'honeypot'    => 'Điền vào ô bẫy bot (honeypot)',
         'brute_force' => 'Đăng nhập sai nhiều lần',
         'login_bot'   => 'Bot dò mật khẩu (POST thẳng vào wp-login.php)',
+        'login_geo'   => 'Vào trang đăng nhập từ ngoài Việt Nam',
         'firewall'    => 'Firewall',
         'matomo'      => 'Click ảo (Matomo)',
         'clickfraud'  => 'Click ảo (Live Traffic)',

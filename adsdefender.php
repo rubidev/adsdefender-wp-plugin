@@ -176,6 +176,7 @@ foreach ([
     ['brute-force.php',      'security'],
     ['firewall.php',         'security'],
     ['hide-login.php',       'security'],
+    ['login-geo.php',        'security'],      // chỉ cho đăng nhập từ VN (dùng hàm của threat-intel.php)
     ['rate-limit.php',       'security'],
     ['honeypot.php',         'security'],
     ['404-detector.php',     'security'],

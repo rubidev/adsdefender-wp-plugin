@@ -111,7 +111,7 @@ function adsdefender_settings_sections(): array
                               'hp_enabled',
                               'rc_enabled', 'rc_provider', 'rc_site_key', 'rc_secret_key', 'rc_v3_threshold',
                               'rc_on_login', 'rc_on_lostpass', 'rc_on_register', 'rc_on_comment',
-                              'hl_enabled', 'hl_slug', 'xmlrpc_disabled',
+                              'hl_enabled', 'hl_slug', 'xmlrpc_disabled', 'lg_vn_only',
                               'cs_enabled', 'cs_rate_limit', 'cs_blocklist'],
         'sec_hardening'   => ['st_enabled', 'st_protect_files', 'st_dir_browsing', 'st_uploads_php', 'st_plugins_php', 'st_themes_php',
                               'wt_file_editor', 'wt_remove_version', 'wt_author_enum', 'wt_rest_users', 'wt_rss_version',
@@ -124,6 +124,22 @@ function adsdefender_settings_sections(): array
                               'cf_enabled', 'cf_mode', 'cf_clicks', 'cf_hours', 'cf_bot', 'cf_ti', 'cf_gclid', 'cf_subnet', 'cf_subnet_n'],
         'sec_threat'      => ['ti_spamhaus', 'ti_firehol', 'ti_tor'],
     ];
+}
+
+/**
+ * Bật "chỉ đăng nhập từ VN" mà IP hiện tại của admin không được phép → từ chối bật,
+ * tránh tự khoá mình ở lần đăng nhập sau. Chưa có danh sách thì tải trước rồi mới kiểm tra.
+ */
+function adsdefender_sanitize_lg_vn_only(bool $want): int
+{
+    if (!$want || !function_exists('adsdefender_lg_check')) return $want ? 1 : 0;
+    if (!get_option(ADSDEFENDER_LG_OPTION)) adsdefender_lg_sync();
+    $ip = adsdefender_get_real_ip();
+    [$ok, $why] = adsdefender_lg_check($ip);
+    if ($ok) return 1;
+    add_settings_error('adsdefender_settings', 'lg_vn_only',
+        'Không bật "Chỉ đăng nhập từ Việt Nam": IP hiện tại của bạn (' . esc_html($ip) . ') không phải IP Việt Nam / Google / Cloudflare — bật lên bạn sẽ không đăng nhập lại được. Thêm IP này vào Whitelist trước nếu cần.');
+    return 0;
 }
 
 function adsdefender_sanitize_settings($in): array
@@ -268,6 +284,7 @@ function adsdefender_sanitize_settings_full(array $in): array
 
         // ── Hide Login ──
         'hl_enabled'         => !empty($in['hl_enabled'])       ? 1 : 0,
+        'lg_vn_only'         => adsdefender_sanitize_lg_vn_only(!empty($in['lg_vn_only'])),
         'hl_slug'            => preg_replace('/[^a-z0-9\-_]/i', '', trim($in['hl_slug'] ?? '')),
         'xmlrpc_disabled'    => !empty($in['xmlrpc_disabled'])  ? 1 : 0,
 
@@ -380,6 +397,8 @@ function adsdefender_settings_form_close(string $label = 'Lưu cài đặt'): vo
 
 function adsdefender_legacy_page_target(string $page, string $tab, string $stab): ?array
 {
+    // 2.5.128: Live Traffic tách khỏi Chống Click Fraud thành menu riêng
+    if ($page === 'adsdefender-fraud' && $tab === 'live') return ['adsdefender-live', ''];
     if ($page === 'adsdefender-protect') {
         return [
             'log'       => ['adsdefender-fraud', 'log'],

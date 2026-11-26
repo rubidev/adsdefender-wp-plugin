@@ -85,6 +85,7 @@ function adsdefender_block_texts(string $reason): array
         case 'firewall':
         case 'honeypot':
         case 'login_bot':
+        case 'login_geo':
             return ['Yêu cầu không được chấp nhận', 'Yêu cầu vừa gửi chứa nội dung không hợp lệ nên đã bị từ chối. Nếu bạn cho rằng đây là nhầm lẫn, vui lòng liên hệ với chúng tôi kèm mã tham chiếu bên dưới.'];
         case 'not_found':
             return ['Không tìm thấy trang', 'Trang bạn tìm không tồn tại hoặc đã được chuyển đi.'];

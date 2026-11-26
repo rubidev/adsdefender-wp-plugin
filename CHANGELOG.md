@@ -1,6 +1,50 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.128 FIX danh sach "Loai tru IP trong Google Ads" loc sai
+         - Truoc: lay MOI lockout 30 ngay (firewall, quet 404, do mat khau, rate limit,
+           honeypot) + toan bo danh sach chan thu cong / ban tu dong → toan bot quet web,
+           khong bam quang cao, chi ton cho trong gioi han 500 IP / chien dich.
+           Lai THIEU danh sach IP Matomo danh dau click ao
+         - Nay chi gom IP co dau hieu click quang cao: click ao phat hien tai site, IP
+           Matomo danh dau, lockout nguon matomo / clickfraud 30 ngay, IP chan thu cong
+           tung vao tu quang cao (Live Traffic). Hien so IP chan thu cong da bo qua
+         IP QUAN TRI KHONG BAO GIO BI CHAN
+         - Nho IP quan tri 30 ngay (truoc: 24 gio) ke tu lan dung cuoi, ghi ca ngay luc
+           dang nhap thanh cong → admin quay lai sau vai ngay, truoc khi dang nhap (luc
+           de bi chan nhat) van duoc bao ve. IP moi ghi tu go lockout / chan thu cong cu
+         - Brute Force: IP quan tri / whitelist khong bi khoa — truoc day botnet do du 10
+           lan username cua admin la chinh admin cung bi khoa dang nhap
+         - Honeypot bo qua IP quan tri (truoc day thieu)
+         - Khong cho chan tay IP quan tri (Block Log, Block thu cong ke ca dai CIDR chua
+           IP quan tri, nut Chan o Live Traffic); bo IP quan tri khoi danh sach loai tru
+           Google Ads
+         - Tab Whitelist hien danh sach IP quan tri tu dong + han
+         LIVE TRAFFIC THANH MENU RIENG (AdsDefender → 📡 Live Traffic)
+         - Tach khoi tab cua Chong Click Fraud; link cu (?page=adsdefender-fraud&tab=live)
+           tu chuyen huong
+         - Gon hon: o cai dat (ghi log + tu phat hien click ao) thu lai thanh 1 dong tom
+           tat trang thai (tu mo khi Live Traffic dang tat); 9 the so lieu thanh 1 dai
+           ngang, nhan ngan (giai thich o tooltip); muc Loai tru IP Google Ads mo ta ngan
+         CHI DANG NHAP TU VIET NAM (Bao mat → Dang nhap, mac dinh TAT)
+         - wp-login.php, URL an, XML-RPC, Application Password chi mo cho IP Viet Nam +
+           proxy Google (tru dai Google Cloud cho thue) / Cloudflare + whitelist. Tai
+           khoan quan tri / bien tap dang nhap qua form khac (WooCommerce…) tu nuoc ngoai
+           cung bi tu choi; khach mua hang nuoc ngoai van dang nhap binh thuong
+         - Danh sach IP VN tu APNIC (~1.000 dai v4 + 965 dai v6), tai hang tuan, tra cuc
+           bo bang tim kiem nhi phan (~0,2 ms / lan) — khong goi API ngoai khi dang nhap
+         - Site sau Cloudflare chua bat IP that: dung CF-IPCountry, chi tin khi ket noi
+           den tu IP Cloudflare (gia header tu IP khac → khong co tac dung)
+         - Chong tu khoa: chua co danh sach → khong ap dung; IP admin hien tai khong duoc
+           phep → tu choi bat; khan cap: define('ADSDEFENDER_NO_COUNTRY_LOCK', true)
+         - Hide Login dang bat → tra 404 (khong lo trang dang nhap), khong thi 403
+         FIX Hide Login de lot POST dang nhap
+         - Truoc: moi POST vao wp-login.php deu duoc cho qua → botnet POST thang de do
+           mat khau, Hide Login vo tac dung (Live Traffic thay POST /wp-login.php 200)
+         - Nay POST dang nhap phai co cookie cua URL an (nguoi that mo form qua slug nen
+           luon co), khong co → 404 + ghi Security Log. Van cho qua postpass (trang co
+           mat khau), lostpassword, resetpass
+
  2.5.127 BOT DO MAT KHAU (botnet POST thang vao wp-login.php)
          - Live Traffic ghi nham la "Nguoi that": bot gia UA trinh duyet + gia referer
            chinh website. Nay nhan dien POST wp-login.php KHONG co cookie kiem tra cua

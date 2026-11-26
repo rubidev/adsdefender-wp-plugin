@@ -762,7 +762,9 @@ function adsdefender_page_log()
     if (isset($_POST['ads_log_block_ip']) && check_admin_referer('ads_log_block_ip')) {
         $block_ip = sanitize_text_field($_POST['ads_log_ip'] ?? '');
         $note     = sanitize_text_field($_POST['ads_log_note'] ?? 'Block from log');
-        if (filter_var($block_ip, FILTER_VALIDATE_IP)) {
+        if (filter_var($block_ip, FILTER_VALIDATE_IP) && adsdefender_is_temp_whitelisted($block_ip)) {
+            echo '<div class="notice notice-error is-dismissible"><p>⛔ <code>' . esc_html($block_ip) . '</code> là IP của quản trị viên — không chặn.</p></div>';
+        } elseif (filter_var($block_ip, FILTER_VALIDATE_IP)) {
             $manual = adsdefender_get_manual_ips();
             $exists = array_filter($manual, fn($m) => ($m['ip'] ?? '') === $block_ip);
             if (!$exists) {
@@ -990,6 +992,16 @@ function adsdefender_page_whitelist()
     <p>IP trong danh sách này sẽ <strong>không bao giờ bị block</strong>.<br>
        Mỗi dòng 1 IP (<code>1.2.3.4</code>) hoặc CIDR (<code>192.168.1.0/24</code>, <code>2405:4803::/32</code>).</p>
 
+    <?php $admin_ips = adsdefender_admin_ips(); arsort($admin_ips); ?>
+    <div style="margin-bottom:16px;padding:10px 14px;background:#edfaef;border-left:4px solid #00a32a;border-radius:2px">
+        <strong>👤 IP quản trị — tự động, không bao giờ bị chặn (<?php echo count($admin_ips); ?>):</strong>
+        <?php foreach ($admin_ips as $aip => $exp): ?>
+            <code style="margin:2px 6px 2px 0;display:inline-block" title="Hết hạn <?php echo esc_attr(wp_date('d/m/Y H:i', $exp)); ?>"><?php echo esc_html($aip); ?><?php echo $aip === $my_ip ? ' (bạn)' : ''; ?></code>
+        <?php endforeach; ?>
+        <br><span class="description">Ghi khi quản trị viên đăng nhập / dùng trang quản trị, nhớ <?php echo (int) ADSDEFENDER_ADMIN_IP_DAYS; ?> ngày kể từ lần dùng cuối.
+            IP mới được ghi sẽ tự gỡ lockout / chặn thủ công đang có.</span>
+    </div>
+
     <?php if (!empty($lines)): ?>
     <div style="margin-bottom:16px;padding:10px 14px;background:#f0f6fc;border-left:4px solid #2271b1;border-radius:2px">
         <strong><?php echo count($lines); ?> entries đang whitelist:</strong><br style="margin-bottom:4px">
@@ -1030,6 +1042,10 @@ function adsdefender_page_manual()
         $new_note = trim(sanitize_text_field($_POST['manual_note'] ?? ''));
         if (!filter_var($new_ip, FILTER_VALIDATE_IP) && !preg_match('/^[\da-fA-F:\.]+\/\d{1,3}$/', $new_ip)) {
             $notice = ['type' => 'error', 'msg' => "IP không hợp lệ: <code>" . esc_html($new_ip) . "</code>"];
+        } elseif ($hit = array_values(array_filter(array_merge(array_keys(adsdefender_admin_ips()), [adsdefender_get_real_ip()]),
+                      fn($a) => $a !== '' && ($a === $new_ip || adsdefender_ip_matches($a, [$new_ip]))))) {
+            // IP / dải CIDR chứa IP quản trị → không chặn
+            $notice = ['type' => 'error', 'msg' => "⛔ <code>" . esc_html($new_ip) . "</code> chứa IP của quản trị viên (<code>" . esc_html($hit[0]) . "</code>) — không chặn."];
         } elseif (in_array($new_ip, array_column($manual, 'ip'), true)) {
             $notice = ['type' => 'warning', 'msg' => "<code>" . esc_html($new_ip) . "</code> đã có trong danh sách."];
         } else {
@@ -1154,10 +1170,14 @@ function adsdefender_fraud_tab_live(): void
     ?>
     <style>
     .lt-box{background:#fff;border:1px solid #dcdcde;border-radius:8px;padding:14px 18px;margin-bottom:16px;max-width:1280px}
-    .lt-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;max-width:1280px}
-    .lt-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px}
-    .lt-card b{display:block;font-size:22px;line-height:1.2;color:#1d2327}
-    .lt-card span{font-size:12px;color:#646970}
+    .lt-cards{display:flex;flex-wrap:wrap;background:#fff;border:1px solid #dcdcde;border-radius:8px;margin-bottom:12px;max-width:1280px}
+    .lt-card{flex:1 1 100px;padding:8px 12px;border-right:1px solid #f0f0f1;white-space:nowrap}
+    .lt-card:last-child{border-right:0}
+    .lt-card b{display:block;font-size:18px;line-height:1.25;color:#1d2327}
+    .lt-card span{font-size:11px;color:#646970}
+    details.lt-box>summary{cursor:pointer;font-weight:600;font-size:13.5px;list-style-position:inside}
+    details.lt-box>summary .description{font-weight:400;margin-left:6px}
+    details.lt-box[open]>summary{margin-bottom:10px}
     .lt-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;max-width:1280px}
     .lt-bar select,.lt-bar input{height:30px}
     .lt-live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#00a32a;font-weight:600}
@@ -1201,7 +1221,11 @@ function adsdefender_fraud_tab_live(): void
     .lt-risk.lo{background:#e7f5ec;color:#00712d}.lt-risk.mid{background:#fdf2e2;color:#9a5b00}.lt-risk.hi{background:#fde8e8;color:#b32d2e}
     </style>
 
-    <div class="lt-box" id="ads-module-toggle">
+    <details class="lt-box" id="ads-module-toggle" style="padding:10px 16px" <?php echo $o['enabled'] ? '' : 'open'; ?>>
+        <summary>⚙ Cài đặt
+            <span class="description">Ghi log: <b style="color:<?php echo $o['enabled'] ? '#00a32a' : '#d63638'; ?>"><?php echo $o['enabled'] ? 'bật' : 'tắt'; ?></b>
+                (giữ <?php echo (int) $o['hours']; ?> giờ) · Tự phát hiện click ảo:
+                <b><?php echo !$cf['enabled'] ? 'tắt' : ($cf['mode'] === 'lock' ? 'khoá IP' : 'chỉ đánh dấu'); ?></b></span></summary>
         <?php adsdefender_settings_form_open('live_traffic'); ?>
         <label style="font-weight:600;font-size:14px"><input type="checkbox" name="adsdefender_settings[lt_enabled]" value="1" <?php checked($o['enabled']); ?>>
             Ghi lại mọi lượt truy cập (Live Traffic)</label>
@@ -1241,33 +1265,34 @@ function adsdefender_fraud_tab_live(): void
                 Chặn trên website <strong>không</strong> làm Google ngừng tính tiền — hãy đưa IP vào <em>loại trừ IP</em> của Google Ads (bảng bên dưới).</p>
         </div>
         <?php adsdefender_settings_form_close('Lưu'); ?>
-    </div>
+    </details>
 
     <?php if (!$o['enabled']): ?>
     <div class="notice notice-info inline" style="max-width:1280px"><p>Live Traffic đang <strong>tắt</strong>. Bật ở ô phía trên để bắt đầu ghi — dữ liệu xuất hiện ngay ở lượt truy cập tiếp theo.</p></div>
     <?php endif; ?>
 
     <div class="lt-cards">
-        <div class="lt-card"><b id="lt-online">–</b><span>người thật online (5 phút)</span></div>
-        <div class="lt-card"><b id="lt-hits">–</b><span>lượt truy cập / giờ</span></div>
-        <div class="lt-card"><b id="lt-ips">–</b><span>IP khác nhau / giờ</span></div>
-        <div class="lt-card"><b id="lt-ads" style="color:#2271b1">–</b><span>từ quảng cáo / giờ</span></div>
-        <div class="lt-card"><b><span id="lt-g_ads" style="color:#2271b1">–</span> <small style="font-size:13px;color:#8c8f94">/</small> <span id="lt-g_org" style="color:#00712d">–</span></b><span>Google Ads / Google tự nhiên · giờ</span><span id="lt-gfake-w" style="display:none;color:#b32d2e;font-weight:600"><br>⚠ <span id="lt-g_fake">0</span> gclid đáng ngờ</span></div>
-        <div class="lt-card"><b id="lt-bots" style="color:#9a5b00">–</b><span>bot / giờ</span></div>
-        <div class="lt-card"><b id="lt-blocked" style="color:#b32d2e">–</b><span>bị chặn / giờ</span></div>
-        <div class="lt-card"><b id="lt-conv" style="color:#00a32a">–</b><span>chuyển đổi / giờ · <span id="lt-conv_g">0</span> từ Google Ads</span></div>
-        <div class="lt-card"><b id="lt-cf" style="color:#b32d2e">–</b><span>click ảo / giờ · <span id="lt-cf_ips">0</span> IP</span></div>
+        <div class="lt-card" title="Người thật xem trang trong 5 phút qua"><b id="lt-online">–</b><span>online</span></div>
+        <div class="lt-card" title="Lượt truy cập trong 1 giờ qua"><b id="lt-hits">–</b><span>lượt / giờ</span></div>
+        <div class="lt-card" title="Số IP khác nhau trong 1 giờ qua"><b id="lt-ips">–</b><span>IP / giờ</span></div>
+        <div class="lt-card" title="Lượt vào từ quảng cáo (mọi nền tảng) trong 1 giờ qua"><b id="lt-ads" style="color:#2271b1">–</b><span>từ quảng cáo</span></div>
+        <div class="lt-card" title="Google Ads / Google tìm kiếm tự nhiên trong 1 giờ qua"><b><span id="lt-g_ads" style="color:#2271b1">–</span><small style="font-size:12px;color:#8c8f94"> / </small><span id="lt-g_org" style="color:#00712d">–</span></b><span>G.Ads / G.tự nhiên</span><span id="lt-gfake-w" style="display:none;color:#b32d2e;font-weight:600"> · ⚠ <span id="lt-g_fake">0</span> gclid lạ</span></div>
+        <div class="lt-card" title="Bot trong 1 giờ qua"><b id="lt-bots" style="color:#9a5b00">–</b><span>bot</span></div>
+        <div class="lt-card" title="Request bị chặn trong 1 giờ qua"><b id="lt-blocked" style="color:#b32d2e">–</b><span>bị chặn</span></div>
+        <div class="lt-card" title="Chuyển đổi trong 1 giờ qua (gọi, Zalo, form, đơn hàng)"><b id="lt-conv" style="color:#00a32a">–</b><span>chuyển đổi · <span id="lt-conv_g">0</span> G.Ads</span></div>
+        <div class="lt-card" title="Click ảo phát hiện trong 1 giờ qua"><b id="lt-cf" style="color:#b32d2e">–</b><span>click ảo · <span id="lt-cf_ips">0</span> IP</span></div>
     </div>
 
     <?php $ex = adsdefender_cf_export_ips(); ?>
-    <details class="lt-box" style="padding:12px 16px" <?php echo $ex['ips'] ? '' : ''; ?>>
-        <summary style="cursor:pointer;font-weight:600;font-size:14px">🚫 Loại trừ IP trong Google Ads — <?php echo (int) count($ex['ips']); ?> IP
-            <?php if ($ex['total'] > count($ex['ips'])): ?><span class="description">(lấy 500 / <?php echo (int) $ex['total']; ?> mới nhất)</span><?php endif; ?></summary>
-        <p style="margin:8px 0">Chặn trên website chỉ ngăn kẻ gian vào trang — quảng cáo vẫn hiện cho họ và mỗi click vẫn bị tính tiền.
-            Dán danh sách này vào <strong>Google Ads → Chiến dịch → Cài đặt → Thêm cài đặt → Loại trừ IP</strong> (tối đa 500 IP / chiến dịch, áp cho từng chiến dịch).
-            Gồm IP click ảo phát hiện tại site, IP bị khoá (Matomo + click ảo) 30 ngày qua và IP chặn thủ công — mới nhất trước.</p>
+    <details class="lt-box" style="padding:10px 16px">
+        <summary>🚫 Loại trừ IP trong Google Ads — <?php echo (int) count($ex['ips']); ?> IP
+            <span class="description">chặn trên web không làm Google ngừng tính tiền click
+            <?php if ($ex['total'] > count($ex['ips'])): ?> · lấy 500 / <?php echo (int) $ex['total']; ?> mới nhất<?php endif; ?></span></summary>
+        <p class="description" style="margin:0 0 8px">Dán vào <b>Google Ads → Chiến dịch → Cài đặt → Loại trừ IP</b> (tối đa 500 / chiến dịch).
+            Chỉ gồm IP có dấu hiệu click quảng cáo (click ảo tại site, Matomo, khoá vì click ảo 30 ngày, chặn tay từng vào từ quảng cáo) — không gồm bot quét web.
+            <?php if (!empty($ex['skipped'])): ?>Đã bỏ <?php echo (int) $ex['skipped']; ?> IP chặn tay không có click quảng cáo.<?php endif; ?></p>
         <?php if ($ex['ips']): ?>
-        <textarea id="lt-ex" readonly rows="6" style="width:100%;max-width:640px;font-family:monospace;font-size:12px"><?php echo esc_textarea(implode("\n", $ex['ips'])); ?></textarea><br>
+        <textarea id="lt-ex" readonly rows="5" style="width:100%;max-width:640px;font-family:monospace;font-size:12px"><?php echo esc_textarea(implode("\n", $ex['ips'])); ?></textarea><br>
         <button type="button" class="button button-primary" id="lt-ex-copy">📋 Sao chép</button>
         <a class="button" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=adsdefender_cf_export'), 'adsdefender_cf_export')); ?>">⬇ Tải .txt</a>
         <?php else: ?>

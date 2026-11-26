@@ -62,6 +62,7 @@ function adsdefender_hp_validate(): void
     // Nếu field tồn tại trong POST và có giá trị → bot
     if (isset($_POST[$field]) && $_POST[$field] !== '') {
         $ip = adsdefender_get_real_ip();
+        if ($ip && adsdefender_is_temp_whitelisted($ip)) return;   // IP quản trị không bao giờ bị chặn
         if ($ip) {
             adsdefender_upsert_lockout($ip, 'honeypot');
             adsdefender_log_block($ip, 'honeypot');
