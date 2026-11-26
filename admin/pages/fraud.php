@@ -1400,7 +1400,10 @@ function adsdefender_fraud_tab_live(): void
                 '<td class="lt-ip"><code title="Mã tham chiếu: ' + esc(r.ref) + '">' + esc(r.ip) + '</code>' + you + ti +
                     '<span class="ads-geo sm" data-ip="' + esc(r.ip) + '"></span></td>' +
                 '<td>' + (r.conv ? '<span class="lt-k conv">' + esc(r.conv_name) + '</span>' + (r.kind !== 'human' ? '<br><span class="lt-k ' + esc(r.kind) + '"' + kindTitle + '>' + esc(KIND[r.kind] || r.kind) + '</span>' : '')
-                                 : '<span class="lt-k ' + esc(r.kind) + '"' + kindTitle + '>' + esc(KIND[r.kind] || r.kind) + '</span>') + '</td>' +
+                                 : '<span class="lt-k ' + esc(r.kind) + '"' + kindTitle + '>' + esc(KIND[r.kind] || r.kind) + '</span>') +
+                    (/^prefetch/.test(r.note || '') ? ' <span class="lt-s" title="' + (r.note === 'prefetch-proxy'
+                        ? 'Chrome tải trước trang qua proxy của Google (ẩn IP khách) — khách có thể chưa mở trang. IP hiện là của Google, không bị tính click ảo.'
+                        : 'Trình duyệt tải trước trang khi khách rê chuột vào link — có thể chưa mở trang') + '">tải trước</span>' : '') + '</td>' +
                 '<td>' + srcBadge(r) + '</td>' +
                 '<td>' + trk(r) + '</td>' +
                 (r.conv

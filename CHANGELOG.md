@@ -1,6 +1,17 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.131 Live Traffic: Chrome Prefetch Proxy va request tai truoc
+         - "Chrome Privacy Preserving Prefetch Proxy" (Google kiem tra
+           /.well-known/traffic-advice truoc khi tai truoc trang) ghi chu ro
+           "chrome-prefetch-proxy" thay vi "tool:chrome" de bi hieu la Chrome that.
+           Nhan cong cu giu ca cum nhieu tu thay vi chi tu dau
+         - Request tai truoc (header Sec-Purpose: prefetch — WordPress 6.8 tai truoc khi
+           re chuot vao link, Chrome tai truoc ket qua Google qua proxy an IP): van la
+           nguoi that, them nhan "tai truoc". Qua proxy thi IP la cua Google, nhieu nguoi
+           dung chung → bo phat hien click ao bo qua, khong khoa nham IP Google
+         - Migration: doi ghi chu cu "tool:chrome" cua Prefetch Proxy
+
  2.5.130 HIDE LOGIN VIET LAI — kiem thu 48 truong hop tren localhost
          - FIX /wp-admin/ con vao duoc: trinh duyet tung mo URL an (cookie 1 gio) mo
            /wp-admin/ thi WordPress chuyen huong ve URL an. Nay chua dang nhap → 404

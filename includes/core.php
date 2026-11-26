@@ -32,6 +32,14 @@ add_action('plugins_loaded', function () {
 
 function adsdefender_run_migrations(string $from): void
 {
+    // Migration 2.5.131 — ghi chú cũ "tool:chrome" của Chrome Privacy Preserving Prefetch Proxy
+    if (version_compare($from, '2.5.131', '<')) {
+        global $wpdb;
+        $suppress = $wpdb->suppress_errors(true);
+        $wpdb->query("UPDATE `{$wpdb->prefix}adsdefender_traffic` SET note = 'chrome-prefetch-proxy' WHERE user_agent LIKE '%Prefetch Proxy%'");
+        $wpdb->suppress_errors($suppress);
+    }
+
     // Migration 2.5.130 — dòng Live Traffic cũ ghi "Người thật" nhưng là bot: UA không phải trình
     // duyệt (WhatsApp/2, facebookexternalhit…) hoặc yêu cầu file chỉ bot đọc (robots.txt, sitemap…)
     if (version_compare($from, '2.5.130', '<') && function_exists('adsdefender_ua_bot_reason')) {

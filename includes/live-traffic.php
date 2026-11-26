@@ -277,6 +277,15 @@ function adsdefender_lt_kind(string $ip, string $ua, int $status): array
     if ($ua === '') return ['bot', 'no-ua'];
     if (adsdefender_is_login_bot_request()) return ['bot', 'login-bot'];
 
+    // Trình duyệt TẢI TRƯỚC trang (WordPress 6.8 speculative loading khi rê chuột vào link,
+    // Chrome tải trước kết quả Google qua proxy ẩn IP). Vẫn là khách thật nhưng có thể không
+    // mở trang; qua proxy thì IP là của Google ("anonymous-client-ip") → ghi chú riêng để bộ
+    // phát hiện click ảo bỏ qua (không khoá nhầm IP proxy Google mà nhiều người dùng chung).
+    $purpose = strtolower((string) ($_SERVER['HTTP_SEC_PURPOSE'] ?? ($_SERVER['HTTP_PURPOSE'] ?? '')));
+    if (str_contains($purpose, 'prefetch') && adsdefender_ua_bot_reason($ua) === '') {
+        return ['human', str_contains($purpose, 'anonymous-client-ip') ? 'prefetch-proxy' : 'prefetch'];
+    }
+
     // Bot tự khai (Googlebot, Bingbot…): "thật" nếu reverse DNS đã xác nhận trong cache
     foreach (adsdefender_bot_ua_map() as $frag => $hosts) {
         if (str_contains($lua, $frag)) {
@@ -304,6 +313,8 @@ function adsdefender_lt_kind(string $ip, string $ua, int $status): array
  */
 function adsdefender_ua_bot_reason(string $ua): string
 {
+    // Dịch vụ của Google: kiểm tra /.well-known/traffic-advice trước khi tải trước trang cho Chrome
+    if (stripos($ua, 'prefetch proxy') !== false) return 'chrome-prefetch-proxy';
     if (preg_match('#(bot\b|bot/|crawl|spider|slurp|scan|externalhit|facebookcatalog|whatsapp|telegram|viber|skypeuripreview|'
         . 'preview|embedly|iframely|lighthouse|pagespeed|gtmetrix|pingdom|uptime|statuscake|site24x7|monitor|'
         . 'headless|phantom|selenium|puppeteer|playwright|googleother|google-read-aloud|google-pagerenderer|'
@@ -313,7 +324,8 @@ function adsdefender_ua_bot_reason(string $ua): string
     if (!preg_match('#^Mozilla/5\.0 \(#', $ua) || !preg_match('#AppleWebKit|Gecko/|Trident/#i', $ua)) {
         // Opera Presto cũ ("Opera/9.80 (…) Presto") là trình duyệt thật
         if (preg_match('#^Opera/\d.*Presto#', $ua)) return '';
-        return 'tool:' . strtolower(substr((string) preg_replace('#[/ ;(].*$#', '', $ua), 0, 20));
+        // Nhãn = tên trước dấu "/" ";" "(" — giữ cả cụm nhiều từ (không cắt "Chrome Privacy…" thành "chrome")
+        return 'tool:' . strtolower(trim(substr((string) preg_replace('#\s*[/;(].*$#', '', $ua), 0, 30)));
     }
     return '';
 }
@@ -509,6 +521,8 @@ function adsdefender_cf_detect(int $row_id, string $ip, string $kind, string $cf
     // link — không phải click, Google không tính tiền; WhatsApp còn tải từ chính điện thoại người
     // gửi → khoá là khoá nhầm khách thật.
     if ($kind === 'bot' && preg_match('#^(whatsapp|externalhit|facebookcatalog|telegram|viber|skypeuripreview|preview|embedly|iframely)#', $note)) return '';
+    // Tải trước (chưa chắc khách mở trang); qua proxy thì IP là của Google, nhiều người dùng chung
+    if (str_starts_with($note, 'prefetch')) return '';
 
     if ($c['bot'] && $kind === 'bot') {
         $reason = 'bot'; $detail = $note;
