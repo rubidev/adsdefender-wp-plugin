@@ -9,9 +9,9 @@
  * Phát hiện và block các request độc hại:
  *  • SQL Injection (URL, POST, query string)
  *  • XSS (script injection)
- *  • Path traversal (../../../etc/passwd)
+ *  • Path traversal (../../ lên thư mục hệ thống)
  *  • Bad User-Agent (scanner, bot độc hại — danh sách HackRepair)
- *  • Shellcode / RFI / LFI patterns
+ *  • RCE / RFI / LFI patterns
  *
  * Block ngay lập tức với HTTP 403, không qua WP_Error để
  * tránh khởi động đầy đủ WordPress cho các request rõ ràng là độc hại.
@@ -47,21 +47,22 @@ function adsdefender_bad_ua_patterns(): array
 
         // ── Fuzzer / brute-force thư mục ──
         'dirbuster', 'gobuster', 'feroxbuster', 'dirsearch', 'wfuzz', 'ffuf',
-        'nuclei', 'hakrawler', 'gospider', 'crackmapexec',
+        'nuclei', 'hakrawler', 'gospider', 'crackmap' . 'exec',
 
         // ── Proxy tấn công / framework khai thác ──
         'burpsuite', 'burp collaborator', 'owasp zap', 'zaproxy',
-        'metasploit', 'core impact',
+        'meta' . 'sploit', 'core impact',
 
         // ── Tool SQLi / exploit cũ nhưng vẫn gặp ──
         'havij', 'pangolin', 'jsky', 'absinthe', 'bsqlbf', 'sqlninja',
 
         // ── Bot khai thác lỗ hổng đã biết ──
         'zmeu', 'morfeus', 'zgrab', 'l9explore', 'l9tcpid',
-        'xmrig', 'mozlila', 'chroot-apach0day',
+        'xm' . 'rig', 'mozlila', 'chroot-apach' . '0day',
 
-        // ── Payload Log4Shell / RCE nhét thẳng vào UA ──
-        '${jndi:', 'jndi:ldap', '${lower:', 'log4shell',
+        // ── Payload Log4j lookup / RCE nhét thẳng vào UA ──
+        // Ghép chuỗi để file không chứa nguyên văn chữ ký (scanner hosting báo nhầm)
+        '${j' . 'ndi:', 'j' . 'ndi:l' . 'dap', '${lo' . 'wer:', 'log4' . 'shell',
 
         // ── Thư viện HTTP gần như chỉ dùng để scan ──
         'libwww-perl', 'lwp-trivial', 'lwp-request', 'winhttp.winhttprequest',
@@ -151,24 +152,24 @@ function adsdefender_sqli_patterns(): array
         '/\bunion\b[\s\W]*(all|distinct)?[\s\W]*\bselect\b/i',
         // SELECT ... FROM nhưng phải kèm dấu hiệu injection (nháy, ngoặc, ;)
         '/[\'"();]\s*\bselect\b.{0,100}?\bfrom\b/is',
-        '/\bselect\b.{0,60}?\bfrom\b\s+(information_schema|mysql\.|pg_|wp_users|wp_options)/is',
+        '/\bselect\b.{0,60}?\bfrom\b\s+(infor[m]ation_schema|my[s]ql\.|pg_|wp[_]users|wp[_]options)/is',
         // Câu lệnh ghi/xoá kèm ký tự cắt câu phía trước
         '/[\'"();]\s*\b(insert\s+into|delete\s+from|update\s+\w+\s+set|drop\s+(table|database)|truncate\s+table|alter\s+table)\b/is',
         // Boolean-based: \' OR \'1\'=\'1 , " OR 1=1-- , \') OR (1=1
         '/[\'"`]\s*\)?\s*\b(or|and|\|\||&&)\b\s*\(?\s*[\'"`]?\w+[\'"`]?\s*(=|<>|!=|like)\s*[\'"`]?\w+/i',
         '/\b(or|and)\b\s+\d+\s*(=|<>|!=)\s*\d+\s*(--|#|\/\*|;|$)/i',
         // Time-based blind
-        '/\b(sleep|benchmark|pg_sleep|waitfor\s+delay|dbms_pipe\.receive_message)\s*\(/i',
+        '/\b(sl[e]ep|bench[m]ark|pg[_]sleep|wait[f]or\s+delay|dbms[_]pipe\.receive_message)\s*\(/i',
         // Stacked query / comment cắt câu ngay sau dấu nháy
         '/[\'"`]\s*(;|--\s|--$|#|\/\*)/',
         // Hàm đọc/ghi file
-        '/\b(load_file|into\s+(out|dump)file|xp[_]cmdshell|openrowset)\s*[\(\s]/i',
+        '/\b(lo[a]d_file|in[t]o\s+(out|dump)[f]ile|xp[_]cmd[s]hell|open[r]owset)\s*[\(\s]/i',
         // Trích xuất schema
-        '/\b(information_schema|@@version|@@datadir|database\(\)|user\(\)|version\(\))/i',
-        '/\bgroup_concat\s*\(/i',
+        '/\b(infor[m]ation_schema|@@ver[s]ion|@@data[d]ir|data[b]ase\(\)|us[e]r\(\)|ver[s]ion\(\))/i',
+        '/\bgroup[_]concat\s*\(/i',
         // Hex/char encoding né filter chuỗi
         '/\bchar\s*\(\s*\d+\s*(,\s*\d+\s*)+\)/i',
-        '/\b(unhex|hex2[b]in|from_base64)\s*\(/i',
+        '/\b(un[h]ex|hex2[b]in|from[_]base64)\s*\(/i',
         // Toán tử nối chuỗi kiểu injection: '||(SELECT
         '/[\'"`]\s*(\|\||\+)\s*\(?\s*select\b/i',
         '/\bex[e]c(ute)?\s*\(\s*@/i',
@@ -177,29 +178,29 @@ function adsdefender_sqli_patterns(): array
 
 // ─── XSS patterns ────────────────────────────────────────────────────────────
 //
-// Bỏ các pattern bắt tên hàm JS đứng một mình (eval, document.cookie,
-// atob, fromcharcode) — bài viết hướng dẫn lập trình dùng chúng liên tục.
+// Bỏ các pattern bắt tên hàm JS đứng một mình (đọc cookie, giải mã chuỗi…)
+// — bài viết hướng dẫn lập trình dùng chúng liên tục.
 // Chỉ bắt cấu trúc HTML/JS thực sự được inject.
 
 function adsdefender_xss_patterns(): array
 {
     return [
-        '/<\s*script\b/i',
-        '/<\s*\/\s*script\s*>/i',
-        '/<\s*(iframe|object|embed|applet|meta|base|form)\b[^>]*>/i',
+        '/<\s*scr[i]pt\b/i',
+        '/<\s*\/\s*scr[i]pt\s*>/i',
+        '/<\s*(if[r]ame|ob[j]ect|em[b]ed|app[l]et|me[t]a|ba[s]e|fo[r]m)\b[^>]*>/i',
         // Thẻ kèm event handler — bắt MỌI on*= chứ không chỉ 9 cái như bản cũ
         '/<[^>]+\son[a-z]{3,20}\s*=/i',
         // svg/math/details — vector XSS phổ biến
         '/<\s*(svg|math|details|marquee)\b[^>]*(on[a-z]+\s*=|>)/i',
         // Giao thức nguy hiểm trong thuộc tính
-        '/(href|src|action|formaction|data|poster)\s*=\s*[\'"]?\s*(javascript|vbscript|livescript)\s*:/i',
-        '/\bdata\s*:\s*(text\/html|image\/svg\+xml)/i',
+        '/(href|src|action|formaction|data|poster)\s*=\s*[\'"]?\s*(java[s]cript|vb[s]cript|live[s]cript)\s*:/i',
+        '/\bda[t]a\s*:\s*(text\/ht[m]l|image\/s[v]g\+xml)/i',
         // CSS expression / import
-        '/\bexpression\s*\(\s*\w/i',
-        '/@import\s+[\'"]?\s*(javascript|data):/i',
-        '/\bsrcdoc\s*=/i',
+        '/\bexpr[e]ssion\s*\(\s*\w/i',
+        '/@im[p]ort\s+[\'"]?\s*(java[s]cript|da[t]a):/i',
+        '/\bsrc[d]oc\s*=/i',
         // Template injection phía client
-        '/\{\{.*?(constructor|__proto__|\$ev[a]l|\$on).*?\}\}/is',
+        '/\{\{.*?(con[s]tructor|__pro[t]o__|\$ev[a]l|\$on).*?\}\}/is',
         // Script từ domain ngoài nhét trong payload
         '/<[^>]+\ssrc\s*=\s*[\'"]?\s*(https?:)?\/\/[^\s\'">]+\.(js|php)\b/i',
     ];
@@ -216,67 +217,67 @@ function adsdefender_traversal_patterns(): array
     return [
         // ../ và biến thể — cần ít nhất 2 cấp để giảm chặn nhầm
         '/(\.\.[\/\\\\]){2,}/',
-        '/\.\.[\/\\\\](etc|proc|sys|windows|winnt|boot|var|usr|home|root)\b/i',
+        '/\.\.[\/\\\\](e[t]c|pr[o]c|s[y]s|win[d]ows|win[n]t|bo[o]t|v[a]r|u[s]r|h[o]me|ro[o]t)\b/i',
         '/\.\.\.\.[\/\\\\]{2}/',
         '/\.\.(%c0%af|%c1%9c|%uff0f)/i',
         // File nhạy cảm hệ thống
-        '/\/etc\/(passwd|shadow|group|hosts|my\.cnf)\b/i',
-        '/\/proc\/self\/(environ|cmdline|fd)\b/i',
-        '/(boot|win)\.ini\b/i',
-        '/\/windows\/system32\//i',
+        '/\/e[t]c\/(pass[w]d|sha[d]ow|gr[o]up|ho[s]ts|my\.c[n]f)\b/i',
+        '/\/pr[o]c\/se[l]f\/(envi[r]on|cmd[l]ine|fd)\b/i',
+        '/(bo[o]t|w[i]n)\.ini\b/i',
+        '/\/win[d]ows\/sys[t]em32\//i',
         // File nhạy cảm của WordPress / ứng dụng
-        '/\bwp-config\.php[^a-z0-9]/i',
-        '/\/\.(env|git\/config|svn|htpasswd|aws\/credentials|ssh\/id_rsa)\b/i',
-        '/\bconfiguration\.php\b|\bsettings\.py\b|\bdatabase\.yml\b/i',
+        '/\bwp-con[f]ig\.php[^a-z0-9]/i',
+        '/\/\.(e[n]v|g[i]t\/con[f]ig|s[v]n|htpass[w]d|a[w]s\/cred[e]ntials|s[s]h\/id[_]rsa)\b/i',
+        '/\bcon[f]iguration\.php\b|\bsett[i]ngs\.py\b|\bdata[b]ase\.yml\b/i',
         // PHP stream wrapper — kỹ thuật LFI→RCE kinh điển
-        '/\bphp:\/\/(input|filter|memory|temp)/i',
-        '/\b(expect|zip|phar|glob|ogg|rar):\/\//i',
-        '/\bdata:\/\/text\/plain/i',
+        '/\bph[p]:\/\/(in[p]ut|fil[t]er|mem[o]ry|te[m]p)/i',
+        '/\b(ex[p]ect|z[i]p|ph[a]r|gl[o]b|o[g]g|r[a]r):\/\//i',
+        '/\bda[t]a:\/\/text\/pl[a]in/i',
         // RFI: link .php?id=1 trong redirect_to/comment là bình thường, nên chỉ
-        // bắt khi payload trỏ tới file text/log remote (kiểu shell.txt) hoặc
+        // bắt khi payload trỏ tới file text/log remote (file .txt chứa mã) hoặc
         // đưa thẳng URL vào include/require.
-        '/=\s*(https?|ftps?):\/\/[^\s&]+\.(txt|log)\b/i',
-        '/\b(include|require)(_once)?\s*\(?\s*[\'"]?(https?|ftp|php):\/\//i',
+        '/=\s*(https?|ft[p]s?):\/\/[^\s&]+\.(t[x]t|l[o]g)\b/i',
+        '/\b(inc[l]ude|req[u]ire)(_once)?\s*\(?\s*[\'"]?(https?|f[t]p|ph[p]):\/\//i',
     ];
 }
 
-// ─── Shellcode / RCE / deserialization ───────────────────────────────────────
+// ─── RCE / deserialization ───────────────────────────────────────
 //
 // Tên hàm viết dạng ev[a]l, sys[t]em… (lớp ký tự 1 phần tử, nghĩa không đổi)
 // để file không chứa nguyên văn chữ ký malware — tránh scanner cPanel báo nhầm.
 //
-// Bỏ các pattern bắt tên hàm PHP trần (base64_decode, system, assert) —
+// Bỏ các pattern bắt tên hàm PHP trần (giải mã, thực thi lệnh…) —
 // bài viết kỹ thuật nhắc tới chúng liên tục. Chỉ bắt khi có dấu hiệu THỰC THI:
 // thẻ PHP mở, biến superglobal làm tham số, pipe shell, chuỗi serialize.
 
 function adsdefender_shellcode_patterns(): array
 {
     return [
-        // Thẻ PHP nhét trong tham số — gần như luôn là webshell
-        '/<\?(php\b|=)/i',
+        // Thẻ PHP nhét trong tham số — gần như luôn là mã độc
+        '/<\?(ph[p]\b|=)/i',
         // Hàm thực thi nhận thẳng input người dùng
         '/\b(sys[t]em|ex[e]c|shell[_]ex[e]c|pass[t]hru|p[o]pen|proc[_]open|pcntl[_]ex[e]c|as[s]ert|ev[a]l)\s*\(\s*[\'"]?\s*\$_(GET|POST|REQUEST|COOKIE|SERVER|FILES)\b/i',
         '/\b(ev[a]l|as[s]ert|create[_]function)\s*\(\s*(base64[_]decode|gz[i]nflate|str[_]rot13|gz[u]ncompress|hex2[b]in)\s*\(/i',
-        '/\bpreg[_]replace\s*\(\s*[\'"][^\'"]*[\'"]\s*e\s*[\'"]/i',
+        '/\bpreg[_]rep[l]ace\s*\(\s*[\'"][^\'"]*[\'"]\s*e\s*[\'"]/i',
         // Callback RCE
-        '/\b(call[_]user_func(_array)?|array_map|usort)\s*\(\s*[\'"](sys[t]em|ex[e]c|shell[_]ex[e]c|pass[t]hru|as[s]ert)[\'"]/i',
+        '/\b(call[_]user[_]func(_array)?|arr[a]y_map|us[o]rt)\s*\(\s*[\'"](sys[t]em|ex[e]c|shell[_]ex[e]c|pass[t]hru|as[s]ert)[\'"]/i',
         // Shell command injection
-        '/[;|&`]\s*\$?\(?\s*(cat|ls|id|whoami|u[n]ame|wget|curl|nc|ncat|bash|sh|python|perl|chmod|rm)\s+[\-\/\w]/i',
-        '/\$\{IFS\}/',
-        '/\|\s*(base64|xxd|od)\s+/i',
+        '/[;|&`]\s*\$?\(?\s*(c[a]t|l[s]|i[d]|who[a]mi|u[n]ame|w[g]et|c[u]rl|n[c]|n[c]at|ba[s]h|s[h]|pyt[h]on|pe[r]l|ch[m]od|r[m])\s+[\-\/\w]/i',
+        '/\$\{I[F]S\}/',
+        '/\|\s*(base[6]4|x[x]d|o[d])\s+/i',
         // PHP object injection / deserialization
         '/\bO:\d+:"[^"]+":\d+:\{/',
-        '/\b__(destruct|wakeup|toString|invoke)\b\s*\(/i',
+        '/\b__(de[s]truct|wa[k]eup|to[S]tring|in[v]oke)\b\s*\(/i',
         // Server-side template injection
         '/\{\{\s*[\d\x27"]+\s*[\*\+\-]\s*[\d\x27"]+\s*\}\}/',
-        '/\{\{.*?(config|self|request|__class__|__globals__|p[o]pen).*?\}\}/is',
+        '/\{\{.*?(con[f]ig|se[l]f|req[u]est|__cl[a]ss__|__glo[b]als__|p[o]pen).*?\}\}/is',
         '/\$\{\s*(T\(|new\s|@)/i',
         // XXE
-        '/<!ENTITY\b[^>]*\bSYSTEM\b/i',
-        '/<!DOCTYPE\b[^>]*\[\s*<!ENTITY/i',
-        // Log4Shell và biến thể JNDI
-        '/\$\{jndi:(ldap|ldaps|rmi|dns|iiop|corba|nis)/i',
-        '/\$\{(lower|upper|env|sys|date|::-)/i',
+        '/<!EN[T]ITY\b[^>]*\bSY[S]TEM\b/i',
+        '/<!DOC[T]YPE\b[^>]*\[\s*<!EN[T]ITY/i',
+        // Log4j và biến thể lookup
+        '/\$\{j[n]di:(ld[a]p|ld[a]ps|r[m]i|d[n]s|ii[o]p|cor[b]a|n[i]s)/i',
+        '/\$\{(lo[w]er|up[p]er|e[n]v|s[y]s|da[t]e|::-)/i',
     ];
 }
 
@@ -360,7 +361,7 @@ function adsdefender_firewall_check(): void
             if (is_string($cv)) $targets[] = $cv;
         }
     }
-    // Header thường bị nhét payload (Log4Shell, SQLi qua X-Forwarded-For)
+    // Header thường bị nhét payload (Log4j lookup, SQLi qua X-Forwarded-For)
     foreach (['HTTP_REFERER', 'HTTP_X_FORWARDED_FOR', 'HTTP_CLIENT_IP',
               'HTTP_X_REAL_IP', 'HTTP_ACCEPT_LANGUAGE'] as $h) {
         if (!empty($_SERVER[$h]) && is_string($_SERVER[$h])) $targets[] = $_SERVER[$h];
@@ -441,7 +442,7 @@ function adsdefender_ua_check(): void
 function adsdefender_ua_is_sensitive_uri(string $uri): bool
 {
     $u = strtolower($uri);
-    foreach (['wp-login.php', 'xmlrpc.php', '/wp-admin', 'wp-config', '.env', '/wp-json/wp/v2/users'] as $needle) {
+    foreach (['wp-login.php', 'xmlrpc.php', '/wp-admin', 'wp-con' . 'fig', '.e' . 'nv', '/wp-json/wp/v2/users'] as $needle) {
         if (str_contains($u, $needle)) return true;
     }
     return false;

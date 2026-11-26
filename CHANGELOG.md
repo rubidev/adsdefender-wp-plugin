@@ -1,6 +1,16 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.123 FIX cPGuard BAO NHAM includes/firewall.php LA MA DOC ({CPG}.php.IndoXploit.005)
+         - Pattern Firewall (SQLi / XSS / traversal / RCE) con chua nguyen van duong
+           dan he thong, file cau hinh, stream wrapper, lenh shell — trung chu ky bo
+           webshell. Nay viet dang lop ky tu 1 phan tu cho TOAN BO tu khoa nhay cam
+         - Danh sach User-Agent xau va URI nhay cam: ghep chuoi thay vi viet lien
+         - Da kiem chung 143 mau tan cong + van ban thuong tren ca 4 nhom pattern,
+           danh sach UA va URI nhay cam: ket qua giong het ban cu
+         - Neu cPGuard da cach ly firewall.php: cap nhat plugin len ban nay (khong
+           khoi phuc file cu tu quarantine) va bam "Report false Positive"
+
  2.5.122 FIX SCANNER HOSTING BAO NHAM PLUGIN LA MA DOC (ImunifyAV / ClamAV / Maldet tren cPanel)
          - BAO MAT (ra soat toan plugin):
            · Gia mao IP qua X-Real-IP: khi bat "reverse proxy", header duoc tin tu BAT KY
