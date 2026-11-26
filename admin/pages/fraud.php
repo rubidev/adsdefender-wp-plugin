@@ -1201,6 +1201,12 @@ function adsdefender_fraud_tab_live(): void
     .lt-path{font-family:ui-monospace,Consolas,monospace;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
     .lt-code{font-family:monospace;font-weight:600}.lt-code.err{color:#b32d2e}
     .lt-act{white-space:nowrap}
+    .lt-tabs{display:flex;gap:0;border-bottom:1px solid #c3c4c7;margin-bottom:10px;max-width:1280px}
+    .lt-tabs button{background:none;border:1px solid transparent;border-bottom:0;margin-bottom:-1px;padding:7px 14px;font-size:13px;font-weight:600;color:#50575e;cursor:pointer;border-radius:4px 4px 0 0}
+    .lt-tabs button:hover{color:#2271b1}
+    .lt-tabs button.active{background:#fff;border-color:#c3c4c7;color:#1d2327}
+    .lt-tabn{display:inline-block;min-width:18px;padding:0 6px;margin-left:4px;border-radius:9px;background:#fdf2e2;color:#9a5b00;font-size:11px;line-height:17px}
+    .lt-tabn:empty{display:none}
     .lt-act .button{padding:0 6px;min-height:24px;line-height:22px;font-size:12px;margin:0 2px 0 0}
     .lt-ip code{font-size:12px}
     .lt-n{display:inline-block;font:600 11px/16px -apple-system,sans-serif;background:#fdf2e2;color:#9a5b00;border-radius:8px;padding:0 6px;margin-right:6px;vertical-align:1px}
@@ -1324,11 +1330,18 @@ function adsdefender_fraud_tab_live(): void
         </table>
     </div>
 
+    <div class="lt-tabs" id="lt-tabs">
+        <button type="button" data-scope="people" class="active" title="Người thật xem trang (kể cả chuyển đổi)">👤 Khách truy cập</button>
+        <button type="button" data-scope="bots" title="Bot, công cụ, dịch vụ xem trước link và request bị chặn">🤖 Bot &amp; bị chặn<span class="lt-tabn" id="lt-tab-bots" title="trong 1 giờ qua"></span></button>
+        <button type="button" data-scope="all">Tất cả</button>
+    </div>
+
     <div class="lt-bar">
         <select id="lt-kind">
-            <option value="">Mọi loại khách</option><option value="human">Người thật</option>
-            <option value="bots">Bot</option><option value="blocked">Bị chặn</option>
-            <option value="conv">✅ Chuyển đổi</option>
+            <option value="">Mọi loại khách</option>
+            <option value="human" data-scope="all">Người thật</option>
+            <option value="bots" data-scope="bots all">Bot</option><option value="blocked" data-scope="bots all">Bị chặn</option>
+            <option value="conv" data-scope="people all">✅ Chuyển đổi</option>
             <option value="fraud">🛑 Click ảo</option>
         </select>
         <select id="lt-source">
@@ -1375,6 +1388,23 @@ function adsdefender_fraud_tab_live(): void
         var nonce = '<?php echo esc_js($nonce); ?>', mine = '<?php echo esc_js($mine); ?>';
         var lastId = 0, paused = false, timer = null, busy = false, MAX = 300;
         var pin = {campaign: '', keyword: ''}, topBy = 'keyword';
+        // Tab đang chọn — nhớ trong trình duyệt (per-viewer, không cần lưu server)
+        var scope = 'people';
+        try { scope = localStorage.getItem('adsdefender_lt_scope') || 'people'; } catch (e) {}
+        if (['people', 'bots', 'all'].indexOf(scope) < 0) scope = 'people';
+        function setScope(s, reload) {
+            scope = s;
+            try { localStorage.setItem('adsdefender_lt_scope', s); } catch (e) {}
+            document.querySelectorAll('#lt-tabs button').forEach(function (b) { b.classList.toggle('active', b.dataset.scope === s); });
+            // Ẩn lựa chọn "loại khách" không hợp với tab (vd. "Bot" trong tab Khách truy cập)
+            var sel = document.getElementById('lt-kind');
+            Array.prototype.forEach.call(sel.options, function (o) { o.hidden = !!o.dataset.scope && o.dataset.scope.split(' ').indexOf(s) < 0; });
+            if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden) sel.value = '';
+            if (reload) load(true);
+        }
+        document.getElementById('lt-tabs').addEventListener('click', function (e) {
+            var b = e.target.closest('button[data-scope]'); if (b && b.dataset.scope !== scope) setScope(b.dataset.scope, true);
+        });
         var MT = {e: 'chính xác', p: 'cụm từ', b: 'rộng'};
         var KIND = {human: 'Người thật', good_bot: 'Bot thật', bot: 'Bot', blocked: 'Bị chặn'};
         var SRC = {google_ads: 'Google Ads', google_organic: 'Google', meta_ads: 'Meta Ads', tiktok_ads: 'TikTok Ads', ads: 'Quảng cáo',
@@ -1382,7 +1412,7 @@ function adsdefender_fraud_tab_live(): void
         var body = document.getElementById('lt-body');
         function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
         function filters() {
-            return {kind: val('lt-kind'), source: val('lt-source'), status: val('lt-status'), ip: val('lt-ip').trim(),
+            return {scope: scope === 'all' ? '' : scope, kind: val('lt-kind'), source: val('lt-source'), status: val('lt-status'), ip: val('lt-ip').trim(),
                     q: val('lt-q').trim(), tracked: document.getElementById('lt-tracked').checked ? 1 : '',
                     campaign: pin.campaign, keyword: pin.keyword};
         }
@@ -1508,6 +1538,7 @@ function adsdefender_fraud_tab_live(): void
                 var d = res.data, s = d.stats;
                 ['online', 'hits', 'ips', 'ads', 'g_ads', 'g_org', 'g_fake', 'bots', 'blocked', 'conv', 'conv_g', 'cf', 'cf_ips'].forEach(function (k) { document.getElementById('lt-' + k).textContent = (s[k] || 0).toLocaleString('vi-VN'); });
                 document.getElementById('lt-gfake-w').style.display = s.g_fake ? '' : 'none';
+                document.getElementById('lt-tab-bots').textContent = ((s.bots || 0) + (s.blocked || 0)) ? ((s.bots || 0) + (s.blocked || 0)).toLocaleString('vi-VN') : '';
                 if (reset) body.innerHTML = '';
                 if (reset && !d.rows.length) { body.innerHTML = '<tr class="lt-empty"><td colspan="8" style="text-align:center;color:#888;padding:20px">Chưa có lượt truy cập nào khớp bộ lọc.</td></tr>'; return; }
                 if (d.rows.length) {
@@ -1611,6 +1642,7 @@ function adsdefender_fraud_tab_live(): void
             (navigator.clipboard ? navigator.clipboard.writeText(t.value) : Promise.reject()).then(function () { msg('✅ Đã sao chép ' + t.value.split('\n').length + ' IP'); },
                 function () { document.execCommand('copy'); msg('✅ Đã sao chép'); });
         });
+        setScope(scope, false);
         load(true); loadTop();
         timer = setInterval(tick, 5000);
         setInterval(function () { if (!paused && !document.hidden) loadTop(); }, 60000);

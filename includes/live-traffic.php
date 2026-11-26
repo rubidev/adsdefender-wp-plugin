@@ -818,6 +818,9 @@ function adsdefender_lt_query(array $f, int $after_id = 0, int $limit = 100): ar
     $table = $wpdb->prefix . ADSDEFENDER_TRAFFIC_TABLE;
     $where = ['1=1']; $args = [];
     if ($after_id > 0)            { $where[] = 'id > %d';      $args[] = $after_id; }
+    // Tab: khách truy cập (người thật) / bot & bị chặn — kết hợp được với bộ lọc loại khách bên dưới
+    if (($f['scope'] ?? '') === 'people')   { $where[] = "kind NOT IN ('bot','good_bot','blocked')"; }
+    elseif (($f['scope'] ?? '') === 'bots') { $where[] = "kind IN ('bot','good_bot','blocked')"; }
     if (!empty($f['kind']))       {
         if ($f['kind'] === 'bots') { $where[] = "kind IN ('bot','good_bot')"; }
         elseif ($f['kind'] === 'conv') { $where[] = 'via = 2'; }
@@ -1060,6 +1063,7 @@ add_action('wp_ajax_adsdefender_lt_feed', function () {
     if (!current_user_can('manage_options')) wp_send_json_error('Không có quyền');
     $f = [
         'kind'   => sanitize_key($_POST['kind'] ?? ''),
+        'scope'  => in_array($_POST['scope'] ?? '', ['people', 'bots'], true) ? $_POST['scope'] : '',
         'source' => sanitize_key($_POST['source'] ?? ''),
         'ip'     => filter_var(trim((string) ($_POST['ip'] ?? '')), FILTER_VALIDATE_IP) ?: '',
         'vid'    => preg_replace('/[^a-f0-9]/', '', strtolower((string) ($_POST['vid'] ?? ''))),

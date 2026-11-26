@@ -1,6 +1,13 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.132 Live Traffic tach tab: 👤 Khach truy cap | 🤖 Bot & bi chan | Tat ca
+         - Mac dinh mo tab Khach truy cap (nguoi that, ke ca chuyen doi) — bot, cong cu,
+           xem truoc link, request bi chan sang tab rieng, nhan tab hien so bot + bi
+           chan trong 1 gio
+         - Bo loc nguon / ma / IP / tu khoa van dung trong tung tab; o "loai khach" chi
+           hien lua chon hop voi tab. Nho tab dang chon tren trinh duyet
+
  2.5.131 Live Traffic: Chrome Prefetch Proxy va request tai truoc
          - "Chrome Privacy Preserving Prefetch Proxy" (Google kiem tra
            /.well-known/traffic-advice truoc khi tai truoc trang) ghi chu ro
