@@ -64,6 +64,9 @@ io.open('adsdefender-update.json','w',encoding='utf-8').write(
     json.dumps(data, ensure_ascii=False, indent=2) + '\n')
 PYEOF
 
+# ── 2b. Mã hoá bộ luật Firewall (dev/firewall-rules.json → includes/*.dat) ───
+python dev/build-rules.py
+
 # ── 3. Commit + tag + push ───────────────────────────────────────────────────
 git add -A
 git diff --cached --quiet || git commit -m "Phát hành ${TAG}"
@@ -81,6 +84,7 @@ rm -f "$BUILD/adsdefender/.gitignore" \
       "$BUILD/adsdefender/release.sh" \
       "$BUILD/adsdefender/CHANGELOG.md" \
       "$BUILD/adsdefender/adsdefender-update.json"
+rm -rf "$BUILD/adsdefender/dev"   # nguồn luật dạng text — chính là thứ scanner bắt
 
 ( cd "$BUILD" && 7z a -tzip -mx=9 "$ZIP" adsdefender >/dev/null )
 
@@ -89,6 +93,8 @@ import zipfile, sys
 z = zipfile.ZipFile(sys.argv[1]); n = z.namelist()
 assert all('\\' not in x for x in n), 'ZIP có backslash'
 assert 'adsdefender/adsdefender.php' in n, 'thiếu file chính'
+assert 'adsdefender/includes/firewall-rules.dat' in n, 'thiếu bộ luật Firewall'
+assert not any(x.startswith('adsdefender/dev/') for x in n), 'dev/ lọt vào ZIP'
 assert z.testzip() is None, 'ZIP hỏng'
 print('   ZIP OK - %d entries' % len(n))
 PYEOF

@@ -193,10 +193,27 @@ foreach ([
     ['popup.php',            'marketing'],
 ] as [$adsdefender_file, $adsdefender_module]) {
     if ($adsdefender_module === null || adsdefender_module_enabled($adsdefender_module)) {
-        require_once ADSDEFENDER_DIR . 'includes/' . $adsdefender_file;
+        // Scanner malware trên hosting (cPGuard, ImunifyAV…) có thể cách ly nhầm
+        // một file → require_once sẽ fatal làm sập CẢ site. Bỏ qua file thiếu,
+        // tính năng đó tạm tắt, và báo cho admin.
+        if (is_readable(ADSDEFENDER_DIR . 'includes/' . $adsdefender_file)) {
+            require_once ADSDEFENDER_DIR . 'includes/' . $adsdefender_file;
+        } else {
+            $GLOBALS['adsdefender_missing_files'][] = 'includes/' . $adsdefender_file;
+        }
     }
 }
 unset($adsdefender_file, $adsdefender_module);
+
+if (!empty($GLOBALS['adsdefender_missing_files'])) {
+    add_action('admin_notices', function () {
+        if (!current_user_can('activate_plugins')) return;
+        echo '<div class="notice notice-error"><p><strong>AdsDefender:</strong> thiếu file '
+            . esc_html(implode(', ', $GLOBALS['adsdefender_missing_files']))
+            . ' — có thể bị scanner bảo mật của hosting cách ly nhầm. Tính năng liên quan đang tạm tắt. '
+            . 'Hãy cập nhật / cài lại AdsDefender bản mới nhất và báo "false positive" cho hosting.</p></div>';
+    });
+}
 
 require_once ADSDEFENDER_DIR . 'admin/menu.php';
 

@@ -30,78 +30,38 @@ function adsdefender_ua_enabled(): bool
     return !empty(adsdefender_settings()['ua_enabled']);
 }
 
-// ─── Bad User-Agent list ──────────────────────────────────────────────────────
-// Chỉ gồm scanner / tool tấn công thật. KHÔNG đưa search engine hay bot SEO
-// vào đây — chúng không tấn công, và block 403 + ghi lockout sẽ làm mất index
-// và phình bảng lockout vô ích. Bot SEO xem adsdefender_seo_bot_patterns().
-// So khớp bằng str_contains trên UA đã strtolower → viết thường hết.
+// ─── Bộ luật ─────────────────────────────────────────────────────────────────
+//
+// Toàn bộ luật (UA xấu, bot SEO, pattern theo nhóm, URI nhạy cảm) nằm trong
+// includes/firewall-rules.dat dạng hex — sinh từ dev/firewall-rules.json bằng
+// dev/build-rules.py. KHÔNG viết luật trực tiếp vào file PHP này: scanner
+// malware trên hosting so khớp text và cách ly cả file (đã gặp với cPGuard).
+//
+// Nguyên tắc chọn luật (xem chi tiết ở file nguồn JSON):
+//  • Chỉ bắt khi có DẤU HIỆU CÚ PHÁP tấn công, không bắt từ khoá đứng một mình
+//  • UA: chỉ scanner / tool tấn công thật, không đưa search engine vào
+//  • Bot SEO: không độc hại, mặc định TẮT, chặn thì không ghi lockout
 
-function adsdefender_bad_ua_patterns(): array
+function adsdefender_fw_rules(string $group): array
 {
-    return [
-        // ── Web vulnerability scanner ──
-        'nikto', 'nmap', 'masscan', 'nessus', 'openvas', 'w3af', 'sqlmap',
-        'acunetix', 'appscan', 'webinspect', 'netsparker', 'invicti', 'qualys',
-        'arachni', 'skipfish', 'wapiti', 'whatweb', 'joomscan', 'uniscan',
-        'paros', 'ratproxy', 'grendel-scan', 'webshag', 'nsauditor',
-
-        // ── Fuzzer / brute-force thư mục ──
-        'dirbuster', 'gobuster', 'feroxbuster', 'dirsearch', 'wfuzz', 'ffuf',
-        'nuclei', 'hakrawler', 'gospider', 'crackmap' . 'exec',
-
-        // ── Proxy tấn công / framework khai thác ──
-        'burpsuite', 'burp collaborator', 'owasp zap', 'zaproxy',
-        'meta' . 'sploit', 'core impact',
-
-        // ── Tool SQLi / exploit cũ nhưng vẫn gặp ──
-        'havij', 'pangolin', 'jsky', 'absinthe', 'bsqlbf', 'sqlninja',
-
-        // ── Bot khai thác lỗ hổng đã biết ──
-        'zmeu', 'morfeus', 'zgrab', 'l9explore', 'l9tcpid',
-        'xm' . 'rig', 'mozlila', 'chroot-apach' . '0day',
-
-        // ── Payload Log4j lookup / RCE nhét thẳng vào UA ──
-        // Ghép chuỗi để file không chứa nguyên văn chữ ký (scanner hosting báo nhầm)
-        '${j' . 'ndi:', 'j' . 'ndi:l' . 'dap', '${lo' . 'wer:', 'log4' . 'shell',
-
-        // ── Thư viện HTTP gần như chỉ dùng để scan ──
-        'libwww-perl', 'lwp-trivial', 'lwp-request', 'winhttp.winhttprequest',
-
-        // ── WordPress / CMS specific ──
-        'wpscan', 'wordpress_exploit', 'wpsec', 'cmsmap', 'droopescan',
-        'wp-scanner', 'xmlrpc-attack',
-
-        // ── Credential stuffing / brute-force ──
-        // Dùng dạng có dấu '/' để không dính app hợp lệ tên Hydra/Medusa
-        'thc-hydra', 'hydra/', 'medusa/', 'patator/', 'ncrack', 'brutus',
-
-        // ── Email / content harvester, site ripper ──
-        'emailcollector', 'emailsiphon', 'emailwolf', 'extractorpro',
-        'atomic_email_hunter', 'cheesebot', 'chinaclaw', 'webbandit',
-        'webcopier', 'webstripper', 'webzip', 'teleport pro',
-        'offline explorer', 'httrack', 'sitesnagger', 'superhttp',
-        'webauto', 'wget++', 'grab-a-site',
-
-        // ── AI scraper phớt lờ robots.txt (ghi nhận nhiều 2024–2025) ──
-        'bytespider', 'imagesiftbot', 'omgili',
-    ];
+    static $rules = null;
+    if ($rules === null) {
+        $rules = [];
+        $file  = __DIR__ . '/firewall-rules.dat';
+        $hex   = is_readable($file) ? preg_replace('/\s+/', '', (string) file_get_contents($file)) : '';
+        if ($hex !== '' && ctype_xdigit($hex) && strlen($hex) % 2 === 0) {
+            $data = json_decode((string) hex2bin($hex), true);
+            if (is_array($data)) $rules = $data;
+        }
+    }
+    $list = $rules[$group] ?? [];
+    return is_array($list) ? array_values(array_filter($list, 'is_string')) : [];
 }
 
-// ─── SEO / crawler bot ───────────────────────────────────────────────────────
-// Không độc hại — chỉ tốn băng thông. Mặc định TẮT. Khi bật thì trả 403 nhưng
-// KHÔNG ghi lockout (xem tham số $lockout của adsdefender_fw_block).
-// Cách đúng để hạn chế các bot này là robots.txt / Crawl-delay.
+// So khớp UA bằng str_contains trên UA đã strtolower → luật viết thường hết.
+function adsdefender_bad_ua_patterns(): array  { return adsdefender_fw_rules('bad_ua'); }
+function adsdefender_seo_bot_patterns(): array { return adsdefender_fw_rules('seo_bot'); }
 
-function adsdefender_seo_bot_patterns(): array
-{
-    return [
-        'ahrefsbot', 'semrushbot', 'dotbot', 'mj12bot', 'blexbot',
-        'petalbot', 'dataforseobot', 'seokicks', 'sistrix', 'serpstatbot',
-        'megaindex', 'linkdexbot', 'spbot',
-        // Scanner khảo sát Internet — không tấn công, chỉ lập chỉ mục dịch vụ
-        'shodan', 'censys', 'internetmeasurement',
-    ];
-}
 
 // ─── Chuẩn hoá payload trước khi so khớp ─────────────────────────────────────
 //
@@ -138,148 +98,12 @@ function adsdefender_fw_strip_sql_comments(string $s): string
     return $s;
 }
 
-// ─── SQL Injection patterns ───────────────────────────────────────────────────
-//
-// Nguyên tắc: chỉ bắt khi có DẤU HIỆU CÚ PHÁP tấn công (dấu nháy, toán tử
-// boolean, comment cắt câu), không bắt từ khoá SQL đứng một mình — "select",
-// "update ... set", "drop table" xuất hiện đầy trong văn bản bình thường.
-// Đây là nguyên nhân chính gây chặn nhầm ở bản cũ.
+// ─── Pattern theo nhóm (chạy trên chuỗi ĐÃ chuẩn hoá) ────────────────────────
 
-function adsdefender_sqli_patterns(): array
-{
-    return [
-        // UNION SELECT — cực hiếm trong văn bản thường
-        '/\bunion\b[\s\W]*(all|distinct)?[\s\W]*\bselect\b/i',
-        // SELECT ... FROM nhưng phải kèm dấu hiệu injection (nháy, ngoặc, ;)
-        '/[\'"();]\s*\bselect\b.{0,100}?\bfrom\b/is',
-        '/\bselect\b.{0,60}?\bfrom\b\s+(infor[m]ation_schema|my[s]ql\.|pg_|wp[_]users|wp[_]options)/is',
-        // Câu lệnh ghi/xoá kèm ký tự cắt câu phía trước
-        '/[\'"();]\s*\b(insert\s+into|delete\s+from|update\s+\w+\s+set|drop\s+(table|database)|truncate\s+table|alter\s+table)\b/is',
-        // Boolean-based: \' OR \'1\'=\'1 , " OR 1=1-- , \') OR (1=1
-        '/[\'"`]\s*\)?\s*\b(or|and|\|\||&&)\b\s*\(?\s*[\'"`]?\w+[\'"`]?\s*(=|<>|!=|like)\s*[\'"`]?\w+/i',
-        '/\b(or|and)\b\s+\d+\s*(=|<>|!=)\s*\d+\s*(--|#|\/\*|;|$)/i',
-        // Time-based blind
-        '/\b(sl[e]ep|bench[m]ark|pg[_]sleep|wait[f]or\s+delay|dbms[_]pipe\.receive_message)\s*\(/i',
-        // Stacked query / comment cắt câu ngay sau dấu nháy
-        '/[\'"`]\s*(;|--\s|--$|#|\/\*)/',
-        // Hàm đọc/ghi file
-        '/\b(lo[a]d_file|in[t]o\s+(out|dump)[f]ile|xp[_]cmd[s]hell|open[r]owset)\s*[\(\s]/i',
-        // Trích xuất schema
-        '/\b(infor[m]ation_schema|@@ver[s]ion|@@data[d]ir|data[b]ase\(\)|us[e]r\(\)|ver[s]ion\(\))/i',
-        '/\bgroup[_]concat\s*\(/i',
-        // Hex/char encoding né filter chuỗi
-        '/\bchar\s*\(\s*\d+\s*(,\s*\d+\s*)+\)/i',
-        '/\b(un[h]ex|hex2[b]in|from[_]base64)\s*\(/i',
-        // Toán tử nối chuỗi kiểu injection: '||(SELECT
-        '/[\'"`]\s*(\|\||\+)\s*\(?\s*select\b/i',
-        '/\bex[e]c(ute)?\s*\(\s*@/i',
-    ];
-}
-
-// ─── XSS patterns ────────────────────────────────────────────────────────────
-//
-// Bỏ các pattern bắt tên hàm JS đứng một mình (đọc cookie, giải mã chuỗi…)
-// — bài viết hướng dẫn lập trình dùng chúng liên tục.
-// Chỉ bắt cấu trúc HTML/JS thực sự được inject.
-
-function adsdefender_xss_patterns(): array
-{
-    return [
-        '/<\s*scr[i]pt\b/i',
-        '/<\s*\/\s*scr[i]pt\s*>/i',
-        '/<\s*(if[r]ame|ob[j]ect|em[b]ed|app[l]et|me[t]a|ba[s]e|fo[r]m)\b[^>]*>/i',
-        // Thẻ kèm event handler — bắt MỌI on*= chứ không chỉ 9 cái như bản cũ
-        '/<[^>]+\son[a-z]{3,20}\s*=/i',
-        // svg/math/details — vector XSS phổ biến
-        '/<\s*(svg|math|details|marquee)\b[^>]*(on[a-z]+\s*=|>)/i',
-        // Giao thức nguy hiểm trong thuộc tính
-        '/(href|src|action|formaction|data|poster)\s*=\s*[\'"]?\s*(java[s]cript|vb[s]cript|live[s]cript)\s*:/i',
-        '/\bda[t]a\s*:\s*(text\/ht[m]l|image\/s[v]g\+xml)/i',
-        // CSS expression / import
-        '/\bexpr[e]ssion\s*\(\s*\w/i',
-        '/@im[p]ort\s+[\'"]?\s*(java[s]cript|da[t]a):/i',
-        '/\bsrc[d]oc\s*=/i',
-        // Template injection phía client
-        '/\{\{.*?(con[s]tructor|__pro[t]o__|\$ev[a]l|\$on).*?\}\}/is',
-        // Script từ domain ngoài nhét trong payload
-        '/<[^>]+\ssrc\s*=\s*[\'"]?\s*(https?:)?\/\/[^\s\'">]+\.(js|php)\b/i',
-    ];
-}
-
-// ─── Path Traversal + LFI/RFI patterns ───────────────────────────────────────
-//
-// Chạy trên chuỗi ĐÃ chuẩn hoá nên bắt được %252f, ....//, ..%c0%af…
-// Bỏ pattern '/https?:\/\/.*\.php\?/' của bản cũ — nó chặn mọi URL hợp lệ
-// trỏ tới file .php có query string (redirect_to, link trong bình luận…).
-
-function adsdefender_traversal_patterns(): array
-{
-    return [
-        // ../ và biến thể — cần ít nhất 2 cấp để giảm chặn nhầm
-        '/(\.\.[\/\\\\]){2,}/',
-        '/\.\.[\/\\\\](e[t]c|pr[o]c|s[y]s|win[d]ows|win[n]t|bo[o]t|v[a]r|u[s]r|h[o]me|ro[o]t)\b/i',
-        '/\.\.\.\.[\/\\\\]{2}/',
-        '/\.\.(%c0%af|%c1%9c|%uff0f)/i',
-        // File nhạy cảm hệ thống
-        '/\/e[t]c\/(pass[w]d|sha[d]ow|gr[o]up|ho[s]ts|my\.c[n]f)\b/i',
-        '/\/pr[o]c\/se[l]f\/(envi[r]on|cmd[l]ine|fd)\b/i',
-        '/(bo[o]t|w[i]n)\.ini\b/i',
-        '/\/win[d]ows\/sys[t]em32\//i',
-        // File nhạy cảm của WordPress / ứng dụng
-        '/\bwp-con[f]ig\.php[^a-z0-9]/i',
-        '/\/\.(e[n]v|g[i]t\/con[f]ig|s[v]n|htpass[w]d|a[w]s\/cred[e]ntials|s[s]h\/id[_]rsa)\b/i',
-        '/\bcon[f]iguration\.php\b|\bsett[i]ngs\.py\b|\bdata[b]ase\.yml\b/i',
-        // PHP stream wrapper — kỹ thuật LFI→RCE kinh điển
-        '/\bph[p]:\/\/(in[p]ut|fil[t]er|mem[o]ry|te[m]p)/i',
-        '/\b(ex[p]ect|z[i]p|ph[a]r|gl[o]b|o[g]g|r[a]r):\/\//i',
-        '/\bda[t]a:\/\/text\/pl[a]in/i',
-        // RFI: link .php?id=1 trong redirect_to/comment là bình thường, nên chỉ
-        // bắt khi payload trỏ tới file text/log remote (file .txt chứa mã) hoặc
-        // đưa thẳng URL vào include/require.
-        '/=\s*(https?|ft[p]s?):\/\/[^\s&]+\.(t[x]t|l[o]g)\b/i',
-        '/\b(inc[l]ude|req[u]ire)(_once)?\s*\(?\s*[\'"]?(https?|f[t]p|ph[p]):\/\//i',
-    ];
-}
-
-// ─── RCE / deserialization ───────────────────────────────────────
-//
-// Tên hàm viết dạng ev[a]l, sys[t]em… (lớp ký tự 1 phần tử, nghĩa không đổi)
-// để file không chứa nguyên văn chữ ký malware — tránh scanner cPanel báo nhầm.
-//
-// Bỏ các pattern bắt tên hàm PHP trần (giải mã, thực thi lệnh…) —
-// bài viết kỹ thuật nhắc tới chúng liên tục. Chỉ bắt khi có dấu hiệu THỰC THI:
-// thẻ PHP mở, biến superglobal làm tham số, pipe shell, chuỗi serialize.
-
-function adsdefender_shellcode_patterns(): array
-{
-    return [
-        // Thẻ PHP nhét trong tham số — gần như luôn là mã độc
-        '/<\?(ph[p]\b|=)/i',
-        // Hàm thực thi nhận thẳng input người dùng
-        '/\b(sys[t]em|ex[e]c|shell[_]ex[e]c|pass[t]hru|p[o]pen|proc[_]open|pcntl[_]ex[e]c|as[s]ert|ev[a]l)\s*\(\s*[\'"]?\s*\$_(GET|POST|REQUEST|COOKIE|SERVER|FILES)\b/i',
-        '/\b(ev[a]l|as[s]ert|create[_]function)\s*\(\s*(base64[_]decode|gz[i]nflate|str[_]rot13|gz[u]ncompress|hex2[b]in)\s*\(/i',
-        '/\bpreg[_]rep[l]ace\s*\(\s*[\'"][^\'"]*[\'"]\s*e\s*[\'"]/i',
-        // Callback RCE
-        '/\b(call[_]user[_]func(_array)?|arr[a]y_map|us[o]rt)\s*\(\s*[\'"](sys[t]em|ex[e]c|shell[_]ex[e]c|pass[t]hru|as[s]ert)[\'"]/i',
-        // Shell command injection
-        '/[;|&`]\s*\$?\(?\s*(c[a]t|l[s]|i[d]|who[a]mi|u[n]ame|w[g]et|c[u]rl|n[c]|n[c]at|ba[s]h|s[h]|pyt[h]on|pe[r]l|ch[m]od|r[m])\s+[\-\/\w]/i',
-        '/\$\{I[F]S\}/',
-        '/\|\s*(base[6]4|x[x]d|o[d])\s+/i',
-        // PHP object injection / deserialization
-        '/\bO:\d+:"[^"]+":\d+:\{/',
-        '/\b__(de[s]truct|wa[k]eup|to[S]tring|in[v]oke)\b\s*\(/i',
-        // Server-side template injection
-        '/\{\{\s*[\d\x27"]+\s*[\*\+\-]\s*[\d\x27"]+\s*\}\}/',
-        '/\{\{.*?(con[f]ig|se[l]f|req[u]est|__cl[a]ss__|__glo[b]als__|p[o]pen).*?\}\}/is',
-        '/\$\{\s*(T\(|new\s|@)/i',
-        // XXE
-        '/<!EN[T]ITY\b[^>]*\bSY[S]TEM\b/i',
-        '/<!DOC[T]YPE\b[^>]*\[\s*<!EN[T]ITY/i',
-        // Log4j và biến thể lookup
-        '/\$\{j[n]di:(ld[a]p|ld[a]ps|r[m]i|d[n]s|ii[o]p|cor[b]a|n[i]s)/i',
-        '/\$\{(lo[w]er|up[p]er|e[n]v|s[y]s|da[t]e|::-)/i',
-    ];
-}
+function adsdefender_sqli_patterns(): array      { return adsdefender_fw_rules('sqli'); }
+function adsdefender_xss_patterns(): array       { return adsdefender_fw_rules('xss'); }
+function adsdefender_traversal_patterns(): array { return adsdefender_fw_rules('traversal'); }
+function adsdefender_shellcode_patterns(): array { return adsdefender_fw_rules('shellcode'); }
 
 // ─── Main firewall check ──────────────────────────────────────────────────────
 
@@ -442,7 +266,7 @@ function adsdefender_ua_check(): void
 function adsdefender_ua_is_sensitive_uri(string $uri): bool
 {
     $u = strtolower($uri);
-    foreach (['wp-login.php', 'xmlrpc.php', '/wp-admin', 'wp-con' . 'fig', '.e' . 'nv', '/wp-json/wp/v2/users'] as $needle) {
+    foreach (adsdefender_fw_rules('sensitive_uri') as $needle) {
         if (str_contains($u, $needle)) return true;
     }
     return false;

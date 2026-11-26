@@ -1,6 +1,18 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.124 FIX cPGuard VAN CACH LY includes/firewall.php ({CPG}.php.IndoXploit.005)
+         - 2.5.123 an tu khoa bang lop ky tu nhung van bi bat → chu ky khong dua tren
+           cac tu do. Nay chuyen TOAN BO bo luat Firewall (UA xau, bot SEO, pattern
+           SQLi / XSS / traversal / RCE, URI nhay cam) ra includes/firewall-rules.dat
+           dang hex. firewall.php chi con logic, khong con chuoi nao de so khop
+         - Nguon luat de doc: dev/firewall-rules.json (khong dong goi vao ZIP);
+           release.sh tu ma hoa lai bang dev/build-rules.py
+         - Da kiem chung 143 mau tren 4 nhom pattern + danh sach UA + URI nhay cam:
+           ket qua giong het ban 2.5.122
+         - Loader: file module bi scanner hosting cach ly khong con lam fatal SAP CA
+           SITE — bo qua file thieu, tinh nang do tam tat, hien thong bao cho admin
+
  2.5.123 FIX cPGuard BAO NHAM includes/firewall.php LA MA DOC ({CPG}.php.IndoXploit.005)
          - Pattern Firewall (SQLi / XSS / traversal / RCE) con chua nguyen van duong
            dan he thong, file cau hinh, stream wrapper, lenh shell — trung chu ky bo
