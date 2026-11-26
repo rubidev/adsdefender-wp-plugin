@@ -8,7 +8,7 @@
  * Plugin URI:   https://saigon.pro
  * Description:  Bảo vệ ngân sách quảng cáo Google Ads khỏi click fraud — tự động sync IP từ Matomo,
  *               block ở tầng PHP, tích hợp marketing & tracking đầy đủ.
- * Version:      2.5.130
+ * Version:      2.5.131
  * Author:       saigon.pro
  * Author URI:   https://saigon.pro
  * Donate link:  https://www.paypal.com/paypalme/dangngocsoncom
@@ -116,7 +116,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('ADSDEFENDER_VERSION',        '2.5.130');
+define('ADSDEFENDER_VERSION',        '2.5.131');
 define('ADSDEFENDER_DIR',            plugin_dir_path(__FILE__));
 define('ADSDEFENDER_OPTION_IPS',     'adsdefender_blocked_ips');
 define('ADSDEFENDER_OPTION_UPDATED', 'adsdefender_last_sync');
