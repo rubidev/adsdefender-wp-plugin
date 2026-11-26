@@ -32,6 +32,20 @@ add_action('plugins_loaded', function () {
 
 function adsdefender_run_migrations(string $from): void
 {
+    // Migration 2.5.127 — dòng Live Traffic cũ của bot dò mật khẩu bị ghi là "Người thật":
+    // POST wp-login.php từ IP chưa từng mở trang đăng nhập, và mọi POST xmlrpc.php
+    if (version_compare($from, '2.5.127', '<')) {
+        global $wpdb;
+        $lt = $wpdb->prefix . 'adsdefender_traffic';
+        $suppress = $wpdb->suppress_errors(true);
+        $wpdb->query("UPDATE `{$lt}` t
+            LEFT JOIN (SELECT ip FROM (SELECT DISTINCT ip FROM `{$lt}` WHERE method = 'GET' AND url LIKE '%/wp-login.php%') g0) g ON g.ip = t.ip
+            SET t.kind = 'bot', t.note = 'login-bot'
+            WHERE t.kind = 'human' AND t.method = 'POST'
+              AND ((t.url LIKE '%/wp-login.php%' AND g.ip IS NULL) OR t.url LIKE '%/xmlrpc.php%')");
+        $wpdb->suppress_errors($suppress);
+    }
+
     // Migration 2.5.126 — cột reason cho block log (trước đây log chặn không ghi lý do).
     // dbDelta không ALTER được vì câu CREATE dùng "IF NOT EXISTS" → thêm cột thủ công.
     // Điền lý do cho log cũ từ security log (cùng IP, lệch ≤ 2 giây) khi tìm được.
@@ -793,6 +807,7 @@ function adsdefender_block_reason_label(string $reason): string
         '404_flood'   => 'Dò quét liên tục (nhiều lỗi 404)',
         'honeypot'    => 'Điền vào ô bẫy bot (honeypot)',
         'brute_force' => 'Đăng nhập sai nhiều lần',
+        'login_bot'   => 'Bot dò mật khẩu (POST thẳng vào wp-login.php)',
         'firewall'    => 'Firewall',
         'matomo'      => 'Click ảo (Matomo)',
         'clickfraud'  => 'Click ảo (Live Traffic)',

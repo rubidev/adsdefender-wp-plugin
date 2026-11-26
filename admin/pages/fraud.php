@@ -1180,7 +1180,13 @@ function adsdefender_fraud_tab_live(): void
     .lt-s.ads{background:#2271b1;color:#fff}.lt-s.gorg{background:#e7f5ec;color:#00712d}
     .lt-path{font-family:ui-monospace,Consolas,monospace;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
     .lt-code{font-family:monospace;font-weight:600}.lt-code.err{color:#b32d2e}
-    .lt-act .button{padding:0 6px;min-height:24px;line-height:22px;font-size:11px}
+    .lt-act{white-space:nowrap}
+    .lt-act .button{padding:0 6px;min-height:24px;line-height:22px;font-size:12px;margin:0 2px 0 0}
+    .lt-ip code{font-size:12px}
+    .lt-n{display:inline-block;font:600 11px/16px -apple-system,sans-serif;background:#fdf2e2;color:#9a5b00;border-radius:8px;padding:0 6px;margin-right:6px;vertical-align:1px}
+    .lt-items{margin-top:6px;max-height:260px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;line-height:1.6}
+    .lt-items>b{font-family:-apple-system,sans-serif}
+    .lt-items div span:first-child{color:#8c8f94;margin-right:10px}
     .lt-trk{font-size:12px;line-height:1.35;max-width:230px}
     .lt-trk .kw{font-weight:600;color:#1d2327;cursor:pointer;word-break:break-word}
     .lt-trk .cp{display:block;color:#646970;font-size:11px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1361,13 +1367,13 @@ function adsdefender_fraud_tab_live(): void
             var kindTitle = r.note ? ' title="' + esc(r.note) + '"' : '';
             var you = r.ip === mine ? ' <span class="lt-s" title="IP của bạn">bạn</span>' : '';
             var tr = document.createElement('tr');
+            var n = r.n || 1, lp = r.last_path != null ? r.last_path : r.path, lm = r.last_method || r.method, ls = r.last_status || r.status;
             tr.className = 'lt-row' + (fresh ? ' lt-new' : '') + (r.conv ? ' lt-conv' : '');
             tr.dataset.id = r.id;
             tr.innerHTML =
-                '<td><span title="' + esc(r.date) + '">' + esc(r.time) + '</span></td>' +
-                '<td><code style="font-size:12px">' + esc(r.ip) + '</code>' + you + ti +
-                    '<br><span style="font-size:11px;color:#8c8f94">mã ' + esc(r.ref) + '</span>' +
-                    '<span class="ads-geo" data-ip="' + esc(r.ip) + '"></span></td>' +
+                '<td><span title="' + esc(r.date) + (n > 1 ? ' · ' + n + ' request từ ' + esc(r.time) + ' đến ' + esc(r.t_last) : '') + '">' + esc(r.t_last || r.time) + '</span></td>' +
+                '<td class="lt-ip"><code title="Mã tham chiếu: ' + esc(r.ref) + '">' + esc(r.ip) + '</code>' + you + ti +
+                    '<span class="ads-geo sm" data-ip="' + esc(r.ip) + '"></span></td>' +
                 '<td>' + (r.conv ? '<span class="lt-k conv">' + esc(r.conv_name) + '</span>' + (r.kind !== 'human' ? '<br><span class="lt-k ' + esc(r.kind) + '"' + kindTitle + '>' + esc(KIND[r.kind] || r.kind) + '</span>' : '')
                                  : '<span class="lt-k ' + esc(r.kind) + '"' + kindTitle + '>' + esc(KIND[r.kind] || r.kind) + '</span>') + '</td>' +
                 '<td>' + srcBadge(r) + '</td>' +
@@ -1375,12 +1381,13 @@ function adsdefender_fraud_tab_live(): void
                 (r.conv
                     ? '<td><span class="lt-cv">' + esc(r.conv_label || r.conv_name) + '</span>' + (r.conv_value ? ' · <b>' + money(r.conv_value) + '</b>' : '') +
                       (r.path ? '<span class="lt-path" style="color:#8c8f94" title="' + esc(r.url) + '">tại ' + esc(r.path) + '</span>' : '') + '</td><td>–</td>'
-                    : '<td><span class="lt-path" title="' + esc(r.url) + '">' + (r.method !== 'GET' ? '<b>' + esc(r.method) + '</b> ' : '') + esc(r.path) + '</span></td>' +
-                      '<td><span class="lt-code' + (r.status >= 400 ? ' err' : '') + '">' + r.status + '</span></td>') +
+                    : '<td><span class="lt-path" title="' + esc(n > 1 ? 'Trang cuối: ' + lp + ' — bấm để xem cả ' + n + ' request' : r.url) + '">' +
+                          (n > 1 ? '<span class="lt-n">×' + n + '</span>' : '') + (lm !== 'GET' ? '<b>' + esc(lm) + '</b> ' : '') + esc(lp) + '</span></td>' +
+                      '<td><span class="lt-code' + (ls >= 400 ? ' err' : '') + '">' + ls + '</span></td>') +
                 '<td class="lt-act">' +
-                    '<button type="button" class="button lt-do" data-do="block" data-ip="' + esc(r.ip) + '">⊘ Chặn</button> ' +
-                    '<button type="button" class="button lt-do" data-do="whitelist" data-ip="' + esc(r.ip) + '">✓ Whitelist</button> ' +
-                    '<a href="#" class="button ads-ip-rep" data-ip="' + esc(r.ip) + '" title="Tra uy tín IP">🔍</a> ' +
+                    '<button type="button" class="button lt-do" data-do="block" data-ip="' + esc(r.ip) + '" title="Chặn IP (thêm vào danh sách chặn thủ công)">⊘</button>' +
+                    '<button type="button" class="button lt-do" data-do="whitelist" data-ip="' + esc(r.ip) + '" title="Whitelist IP">✓</button>' +
+                    '<a href="#" class="button ads-ip-rep" data-ip="' + esc(r.ip) + '" title="Tra uy tín IP">🔍</a>' +
                     '<button type="button" class="button lt-filter" data-ip="' + esc(r.ip) + '" title="Chỉ xem IP này">⚲</button>' +
                 '</td>';
             tr._detail = r;
@@ -1477,14 +1484,42 @@ function adsdefender_fraud_tab_live(): void
                 if (reset && !d.rows.length) { body.innerHTML = '<tr class="lt-empty"><td colspan="8" style="text-align:center;color:#888;padding:20px">Chưa có lượt truy cập nào khớp bộ lọc.</td></tr>'; return; }
                 if (d.rows.length) {
                     var empty = body.querySelector('.lt-empty'); if (empty) empty.remove();
-                    var frag = document.createDocumentFragment();
-                    d.rows.forEach(function (r) { frag.appendChild(row(r, !reset)); });
-                    body.insertBefore(frag, body.firstChild);
-                    lastId = Math.max(lastId, d.rows[0].id);
+                    if (reset) {
+                        var frag = document.createDocumentFragment();
+                        d.rows.forEach(function (r) { frag.appendChild(row(r, false)); });
+                        body.appendChild(frag);
+                    } else {
+                        // Dòng mới (mới nhất trước) → duyệt từ cũ tới mới, gộp vào dòng trên cùng nếu cùng khách
+                        d.rows.slice().reverse().forEach(function (r) {
+                            var top = body.querySelector('tr.lt-row');
+                            if (top && top._detail && canMerge(top._detail, r)) {
+                                var g = merge(top._detail, r), nx = top.nextSibling;
+                                if (nx && nx.classList && nx.classList.contains('lt-detail')) nx.remove();
+                                top.replaceWith(row(g, true));
+                            } else {
+                                body.insertBefore(row(r, true), body.firstChild);
+                            }
+                        });
+                    }
+                    d.rows.forEach(function (r) { lastId = Math.max(lastId, r.id); });
                     var rows = body.querySelectorAll('tr.lt-row');
                     for (var i = MAX; i < rows.length; i++) { var nx = rows[i].nextSibling; if (nx && nx.classList && nx.classList.contains('lt-detail')) nx.remove(); rows[i].remove(); }
                 }
             }).catch(function () { busy = false; msg('⚠️ Mất kết nối, thử lại…', true); });
+        }
+        // Cùng quy tắc với adsdefender_lt_group() phía server: cùng IP + loại khách, cách ≤ 30 phút,
+        // không gộp chuyển đổi; lượt vào từ quảng cáo luôn mở dòng mới.
+        function isEntry(r) { return !r.via && /ads$/.test(r.source || ''); }
+        function canMerge(g, r) {
+            return g.ip === r.ip && g.kind === r.kind && !g.conv && !r.conv && !isEntry(r)
+                && (r.ts || 0) - (g.ts_last || g.ts || 0) <= 1800;
+        }
+        function merge(g, r) {
+            var items = g.items ? g.items.slice() : [[g.time, g.method, g.path, g.status]];
+            items.unshift([r.time, r.method, r.path, r.status]);
+            if (items.length > 50) items.length = 50;
+            return Object.assign({}, g, {id: r.id, n: (g.n || 1) + 1, items: items, ts_last: r.ts, t_last: r.time,
+                last_path: r.path, last_method: r.method, last_status: r.status});
         }
         function msg(t, err) { var m = document.getElementById('lt-msg'); m.textContent = t; m.style.color = err ? '#b32d2e' : '#00a32a'; if (!err) setTimeout(function () { m.textContent = ''; }, 3500); }
         function tick() { if (!paused && !document.hidden) load(false); }
@@ -1533,7 +1568,13 @@ function adsdefender_fraud_tab_live(): void
                 '<b>Nguồn giới thiệu:</b> ' + (r.referer ? esc(r.referer) : '<i>không có</i>') + '<br>' +
                 '<b>User-Agent:</b> ' + (r.ua ? esc(r.ua) : '<i>trống</i>') + '<br>' +
                 (r.vid ? '<b>Matomo visitor ID:</b> <code>' + esc(r.vid) + '</code><br>' : '') +
-                (r.note ? '<b>Ghi chú:</b> ' + esc(r.note) : '') + '</td>';
+                '<b>Mã tham chiếu:</b> ' + esc(r.ref) + (r.note ? ' &nbsp;·&nbsp; <b>Ghi chú:</b> ' + esc(r.note) : '') +
+                (r.n > 1 ? '<div class="lt-items"><b>' + r.n + ' request</b> (URL / UA ở trên là của request đầu' +
+                    (r.n > r.items.length ? '; hiện ' + r.items.length + ' request gần nhất' : '') + '):' +
+                    r.items.map(function (x) {
+                        return '<div><span>' + esc(x[0]) + '</span>' + (x[1] !== 'GET' ? '<b>' + esc(x[1]) + '</b> ' : '') + esc(x[2]) +
+                            ' <span class="lt-code' + (x[3] >= 400 ? ' err' : '') + '">' + x[3] + '</span></div>';
+                    }).join('') + '</div>' : '') + '</td>';
             tr.parentNode.insertBefore(d, nx);
         });
         var exc = document.getElementById('lt-ex-copy');

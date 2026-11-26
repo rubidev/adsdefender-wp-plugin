@@ -10,6 +10,8 @@
  *  • 5 lần thất bại từ cùng IP trong 5 phút → lockout 30 phút
  *  • 10 lần thất bại cùng username trong 5 phút → lockout 30 phút
  *  • Chặn thử đăng nhập với username "admin" (nếu không tồn tại)
+ *  • Chặn bot POST thẳng vào wp-login.php (không có cookie của trang đăng nhập) —
+ *    chống botnet dò mật khẩu mỗi IP 1 lần mà giới hạn theo IP không bắt được
  *  • Dùng bảng adsdefender_brute_events (sliding window, auto-cleanup)
  */
 if (!defined('ABSPATH')) exit;
@@ -51,6 +53,8 @@ function adsdefender_bf_opts(): array
         'max_user'       => max(1,  (int)($opts['bf_max_user']       ?? 10)),  // lần
         'lockout_mins'   => max(5,  (int)($opts['bf_lockout_mins']   ?? 30)),  // phút
         'block_admin'    => !empty($opts['bf_block_admin']),
+        // Mặc định BẬT (chưa từng lưu = bật)
+        'require_cookie' => !array_key_exists('bf_require_cookie', $opts) || !empty($opts['bf_require_cookie']),
     ];
 }
 
@@ -139,6 +143,36 @@ add_filter('authenticate', function ($user, $username, $password) {
 
     return $user;
 }, 30, 3);
+
+// ─── Chặn bot POST thẳng vào wp-login.php ────────────────────────────────────
+//
+// Không khoá IP (lockout): botnet dùng IP dân cư / 4G, nhiều khách thật có thể dùng
+// chung IP đó (CGNAT). Chỉ từ chối request, ghi log.
+
+add_action('login_init', function () {
+    if (!adsdefender_bf_enabled() || !adsdefender_bf_opts()['require_cookie']) return;
+    if (!adsdefender_is_login_bot_request_wplogin()) return;
+
+    $ip = adsdefender_get_real_ip();
+    if ($ip) {
+        $wl = adsdefender_parse_whitelist(adsdefender_settings()['whitelist'] ?? '');
+        if ((!empty($wl) && adsdefender_ip_matches($ip, $wl)) || adsdefender_is_temp_whitelisted($ip)) return;
+        $user = sanitize_user(wp_unslash((string) ($_POST['log'] ?? '')));
+        adsdefender_sec_log('brute_force', $ip, 'login_bot | user=' . substr($user, 0, 60));
+        adsdefender_log_block($ip, 'login_bot');
+    }
+    adsdefender_block_response('login_bot', 403);
+}, 1);
+
+// Form đăng nhập nhúng ở trang khác (wp_login_form() — widget, trang Tài khoản…) POST
+// vào wp-login.php khi khách CHƯA từng mở trang đó → chưa có cookie kiểm tra. Đặt
+// cookie bằng JS ngay trong form: trình duyệt thật chạy được, bot POST thẳng thì không.
+add_filter('login_form_bottom', function ($html) {
+    if (!adsdefender_bf_enabled() || !adsdefender_bf_opts()['require_cookie']) return $html;
+    $name = defined('TEST_COOKIE') ? TEST_COOKIE : 'wordpress_test_cookie';
+    $path = defined('COOKIEPATH') && COOKIEPATH ? COOKIEPATH : '/';
+    return $html . '<script>document.cookie=' . wp_json_encode($name . '=WP%20Cookie%20check; path=' . $path . '; SameSite=Lax') . ';</script>';
+});
 
 // ─── Hook: ghi lại failed login ───────────────────────────────────────────────
 

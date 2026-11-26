@@ -107,7 +107,7 @@ function adsdefender_settings_sections(): array
         'sec_firewall'    => ['fw_enabled', 'ua_enabled', 'seo_bot_block',
                               'rl_enabled', 'rl_max_requests', 'rl_window_secs', 'rl_lockout_mins',
                               'detect_404', 'detect_404_max', 'detect_404_window', 'detect_404_lockout'],
-        'sec_login'       => ['bf_enabled', 'bf_check_period', 'bf_max_ip', 'bf_max_user', 'bf_lockout_mins', 'bf_block_admin',
+        'sec_login'       => ['bf_enabled', 'bf_check_period', 'bf_max_ip', 'bf_max_user', 'bf_lockout_mins', 'bf_block_admin', 'bf_require_cookie',
                               'hp_enabled',
                               'rc_enabled', 'rc_provider', 'rc_site_key', 'rc_secret_key', 'rc_v3_threshold',
                               'rc_on_login', 'rc_on_lostpass', 'rc_on_register', 'rc_on_comment',
@@ -258,6 +258,8 @@ function adsdefender_sanitize_settings_full(array $in): array
         'bf_max_user'        => max(1,  (int)($in['bf_max_user']      ?? 10)),
         'bf_lockout_mins'    => max(5,  (int)($in['bf_lockout_mins']  ?? 30)),
         'bf_block_admin'     => !empty($in['bf_block_admin'])   ? 1 : 0,
+        // Mặc định BẬT: form gửi kèm hidden bf_require_cookie=0 nên bỏ tick vẫn nhận được 0
+        'bf_require_cookie'  => array_key_exists('bf_require_cookie', $in) ? (!empty($in['bf_require_cookie']) ? 1 : 0) : 1,
 
         // ── Firewall ──
         'fw_enabled'         => !empty($in['fw_enabled'])       ? 1 : 0,
@@ -496,6 +498,7 @@ function adsdefender_geo_script(): void
     <style>
     .ads-geo{display:block;font-size:11px;color:#50575e;line-height:1.35;margin-top:2px;max-width:260px}
     .ads-geo:empty{display:none}
+    .ads-geo.sm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
     .ads-geo .cc{display:inline-block;font:600 10px/14px monospace;background:#f0f0f1;border-radius:3px;padding:0 3px;margin-right:3px;color:#1d2327}
     .ads-geo .isp{color:#8c8f94}
     .ads-geo .tg{display:inline-block;font-size:10px;border-radius:3px;padding:0 4px;margin-left:3px}
@@ -508,18 +511,22 @@ function adsdefender_geo_script(): void
         var ajax = <?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, nonce = <?php echo wp_json_encode(wp_create_nonce('adsdefender_geo')); ?>;
         var cache = {}, pending = {}, timer = null, stop = false;
         function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-        function html(g) {
+        // So khớp tên địa danh bỏ dấu cách / hoa thường: "Hanoi" ≈ "Ha Noi", "Ho Chi Minh City" ≈ "Ho Chi Minh"
+        function same(a, b) { a = String(a).toLowerCase().replace(/[^a-z]/g, ''); b = String(b).toLowerCase().replace(/[^a-z]/g, ''); return a.indexOf(b) === 0 || b.indexOf(a) === 0; }
+        // sm = bản gọn 1 dòng (Live Traffic): chỉ mã nước + thành phố + nhãn; nhà mạng xem ở tooltip
+        function html(g, sm) {
             if (!g) return '';
             if (g.local) return '<span class="isp">IP nội bộ</span>';
             if (g.err) return '<span class="isp">Không rõ vị trí</span>';
-            // Trong nước: thành phố, tỉnh — nước ngoài: thành phố, quốc gia (bỏ trùng: "Da Nang, Da Nang")
-            var place = (g.cc === 'VN' ? [g.city, g.region] : [g.city, g.country])
-                .filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(', ') || g.country || '';
+            // Trong nước: thành phố, tỉnh — nước ngoài: thành phố, quốc gia (bỏ trùng: "Hanoi, Ha Noi")
+            var parts = (sm ? [g.city || g.region || g.country] : (g.cc === 'VN' ? [g.city, g.region] : [g.city, g.country])), place = [];
+            parts.forEach(function (x) { if (x && !place.some(function (y) { return same(x, y); })) place.push(x); });
+            place = place.join(', ') || g.country || '';
             var h = (g.cc ? '<span class="cc">' + esc(g.cc) + '</span>' : '') + esc(place);
-            if (g.hosting) h += '<span class="tg dc" title="IP của datacenter / cloud — thường là bot, VPN hoặc proxy, không phải khách thật">datacenter</span>';
-            else if (g.mobile) h += '<span class="tg mb" title="Mạng di động 3G/4G/5G — vị trí thường là nơi đặt gateway của nhà mạng, không chính xác tới tỉnh">di động</span>';
+            if (g.hosting) h += '<span class="tg dc" title="IP của datacenter / cloud — thường là bot, VPN hoặc proxy, không phải khách thật">' + (sm ? 'DC' : 'datacenter') + '</span>';
+            else if (g.mobile) h += '<span class="tg mb" title="Mạng di động 3G/4G/5G — vị trí thường là nơi đặt gateway của nhà mạng, không chính xác tới tỉnh">' + (sm ? '4G' : 'di động') + '</span>';
             if (g.proxy) h += '<span class="tg px" title="Proxy / VPN / Tor">proxy</span>';
-            if (g.isp) h += '<br><span class="isp">' + esc(g.isp) + '</span>';
+            if (g.isp && !sm) h += '<br><span class="isp">' + esc(g.isp) + '</span>';
             return h;
         }
         function title(g) {
@@ -531,7 +538,7 @@ function adsdefender_geo_script(): void
             var need = [];
             (root || document).querySelectorAll('.ads-geo[data-ip]:not([data-done])').forEach(function (el) {
                 var ip = el.getAttribute('data-ip');
-                if (cache[ip]) { el.innerHTML = html(cache[ip]); el.title = title(cache[ip]); el.setAttribute('data-done', '1'); }
+                if (cache[ip]) { el.innerHTML = html(cache[ip], el.classList.contains('sm')); el.title = title(cache[ip]); el.setAttribute('data-done', '1'); }
                 else if (!pending[ip] && need.indexOf(ip) < 0) need.push(ip);
             });
             return need;

@@ -243,6 +243,31 @@ function adsdefender_lt_tracking(string $url, string $referer): array
     return ['campaign' => $name !== '' ? $name : ($cid !== '' ? '#' . $cid : ''), 'keyword' => $kw, 'track' => $t];
 }
 
+/**
+ * Request đăng nhập do bot gửi thẳng, không qua trang đăng nhập:
+ *  • POST wp-login.php mà không có cookie kiểm tra của WordPress (TEST_COOKIE). Trang
+ *    wp-login.php đặt cookie này khi người thật mở form — bot dò mật khẩu POST thẳng
+ *    nên không có, dù giả UA trình duyệt và giả referer chính website.
+ *  • POST xmlrpc.php — kênh dò mật khẩu hàng loạt (system.multicall), người thật không dùng
+ */
+function adsdefender_is_login_bot_request(): bool
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') return false;
+    $path = strtolower((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH));
+    if (str_ends_with($path, '/xmlrpc.php')) return true;
+    return str_ends_with($path, '/wp-login.php') && adsdefender_is_login_bot_request_wplogin();
+}
+
+/** Phần form đăng nhập (không xét đường dẫn — trang login có thể bị đổi slug bởi Hide Login) */
+function adsdefender_is_login_bot_request_wplogin(): bool
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !isset($_POST['log'])) return false;
+    $action = (string) ($_REQUEST['action'] ?? 'login');
+    if ($action !== 'login' && $action !== '') return false;
+    $cookie = defined('TEST_COOKIE') ? TEST_COOKIE : 'wordpress_test_cookie';
+    return empty($_COOKIE[$cookie]);
+}
+
 /** Loại khách: blocked / good_bot / bot / human */
 function adsdefender_lt_kind(string $ip, string $ua, int $status): array
 {
@@ -250,6 +275,7 @@ function adsdefender_lt_kind(string $ip, string $ua, int $status): array
 
     $lua = strtolower($ua);
     if ($ua === '') return ['bot', 'no-ua'];
+    if (adsdefender_is_login_bot_request()) return ['bot', 'login-bot'];
 
     // Bot tự khai (Googlebot, Bingbot…): "thật" nếu reverse DNS đã xác nhận trong cache
     foreach (adsdefender_bot_ua_map() as $frag => $hosts) {
@@ -880,6 +906,7 @@ function adsdefender_lt_present(array $row): array
     return [
         'id'      => (int) $row['id'],
         'time'    => mysql2date('H:i:s', $row['created_at']),
+        'ts'      => (int) mysql2date('U', $row['created_at']),
         'date'    => mysql2date('d/m', $row['created_at']),
         'ip'      => $row['ip'],
         'ref'     => function_exists('adsdefender_block_ref') ? adsdefender_block_ref($row['ip']) : '',
@@ -909,6 +936,60 @@ function adsdefender_lt_present(array $row): array
     ];
 }
 
+/**
+ * Gộp các request LIÊN TIẾP của cùng 1 IP, cùng loại khách, cách nhau ≤ 30 phút thành 1
+ * dòng — bot quét 1000 trang chỉ còn 1 dòng "×1000". Không gộp: chuyển đổi (via = 2);
+ * lượt vào từ quảng cáo luôn MỞ một nhóm mới (các trang xem tiếp sau đó gộp vào nó).
+ * $raw: dòng thô theo id GIẢM dần. Trả tối đa $max nhóm đã trình bày; mỗi nhóm lấy thông
+ * tin nguồn / chiến dịch của lượt ĐẦU (cách khách vào), trang / giờ / mã của lượt CUỐI.
+ */
+function adsdefender_lt_group(array $raw, int $max = 100): array
+{
+    $entry  = fn($r) => (int) $r['via'] === 0 && str_ends_with((string) $r['source'], 'ads');
+    $groups = [];
+    $cur    = null;
+    foreach ($raw as $r) {
+        if ($cur !== null) {
+            $old = end($cur);                     // lượt cũ nhất của nhóm hiện tại
+            if ($r['ip'] === $old['ip'] && $r['kind'] === $old['kind']
+                && (int) $r['via'] !== 2 && (int) $old['via'] !== 2 && !$entry($old)
+                && strtotime($old['created_at']) - strtotime($r['created_at']) <= 30 * MINUTE_IN_SECONDS) {
+                $cur[] = $r;
+                continue;
+            }
+            $groups[] = $cur;
+            if (count($groups) >= $max) { $cur = null; break; }
+        }
+        $cur = [$r];
+    }
+    if ($cur !== null && count($groups) < $max) $groups[] = $cur;
+
+    $out = [];
+    foreach ($groups as $g) {
+        $p = adsdefender_lt_present(end($g));     // lượt đầu: nguồn, chiến dịch, gclid…
+        $n = count($g);
+        if ($n > 1) {
+            $last = $g[0];
+            $lp   = (string) parse_url($last['url'], PHP_URL_PATH);
+            $lq   = (string) parse_url($last['url'], PHP_URL_QUERY);
+            $p['id']          = (int) $last['id'];
+            $p['n']           = $n;
+            $p['ts_last']     = (int) mysql2date('U', $last['created_at']);
+            $p['t_last']      = mysql2date('H:i:s', $last['created_at']);
+            $p['last_path']   = $lp . ($lq !== '' ? '?' . $lq : '');
+            $p['last_method'] = $last['method'];
+            $p['last_status'] = (int) $last['status'];
+            $p['items'] = array_map(fn($x) => [
+                mysql2date('H:i:s', $x['created_at']), $x['method'],
+                (string) parse_url($x['url'], PHP_URL_PATH) . (($q = (string) parse_url($x['url'], PHP_URL_QUERY)) !== '' ? '?' . $q : ''),
+                (int) $x['status'],
+            ], array_slice($g, 0, 50));
+        }
+        $out[] = $p;
+    }
+    return $out;
+}
+
 add_action('wp_ajax_adsdefender_lt_feed', function () {
     check_ajax_referer('adsdefender_lt', 'nonce');
     if (!current_user_can('manage_options')) wp_send_json_error('Không có quyền');
@@ -924,7 +1005,11 @@ add_action('wp_ajax_adsdefender_lt_feed', function () {
         'q'        => isset($_POST['q']) ? mb_substr(sanitize_text_field(wp_unslash($_POST['q'])), 0, 100) : '',
     ];
     $after = max(0, (int) ($_POST['after'] ?? 0));
-    $rows  = array_map('adsdefender_lt_present', adsdefender_lt_query($f, $after, $after ? 200 : 100));
+    // Lần đầu / đổi bộ lọc: đọc 2000 request gần nhất rồi gộp → bot quét hàng nghìn lần
+    // không đẩy hết khách thật ra khỏi màn hình. Cập nhật tiếp: trả dòng mới, trình duyệt tự gộp.
+    $rows  = $after
+        ? array_map('adsdefender_lt_present', adsdefender_lt_query($f, $after, 200))
+        : adsdefender_lt_group(adsdefender_lt_query($f, 0, 2000), 100);
     wp_send_json_success(['rows' => $rows, 'stats' => adsdefender_lt_stats()]);
 });
 

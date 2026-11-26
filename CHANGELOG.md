@@ -1,6 +1,27 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.127 BOT DO MAT KHAU (botnet POST thang vao wp-login.php)
+         - Live Traffic ghi nham la "Nguoi that": bot gia UA trinh duyet + gia referer
+           chinh website. Nay nhan dien POST wp-login.php KHONG co cookie kiem tra cua
+           WordPress (nguoi that mo form truoc nen luon co) va moi POST xmlrpc.php →
+           loai "Bot", ghi chu login-bot
+         - Brute Force: tuy chon moi (mac dinh BAT) "Chan bot do mat khau" — tu choi 403
+           ngay, ghi Security Log + Block Log ly do login_bot. Botnet dung moi IP 1 lan
+           nen gioi han theo IP khong bat duoc. KHONG khoa IP (IP dan cu / 4G dung chung)
+         - Form dang nhap nhung bang wp_login_form() tu dat cookie bang JS → van dung duoc
+         - Migration: dong Live Traffic cu POST wp-login.php tu IP chua tung mo trang
+           dang nhap, va POST xmlrpc.php → doi thanh Bot
+         LIVE TRAFFIC GON HON
+         - Gop request LIEN TIEP cung IP + cung loai khach (cach <= 30 phut) thanh 1 dong
+           "×N" — bot quet 1000 trang chi con 1 dong. Bam dong de xem danh sach trang.
+           Luot vao tu quang cao luon mo dong moi (cac trang xem tiep gop vao no);
+           chuyen doi khong gop
+         - Lan tai dau doc 2000 request gan nhat roi gop phia may chu → bot khong day
+           het khach that ra khoi man hinh; cap nhat tiep gop ngay tren trinh duyet
+         - Dong thap hon: vi tri 1 dong (nha mang xem o tooltip), ma tham chieu chuyen
+           vao tooltip IP + phan chi tiet, nut thao tac dang icon tren 1 dong
+
  2.5.126 FIX Live Traffic tach 1 chien dich thanh 2 dong ("24545854213" va "#24545854213")
          - Tai khoan dat utm_campaign={campaignid} ghi chien dich bang ID so tran, con
            click chi co gad_campaignid (gbraid / PMax / auto-tagging) ghi "#id" → bang

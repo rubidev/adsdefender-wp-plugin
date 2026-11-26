@@ -177,6 +177,18 @@ function adsdefender_security_tab_login(): void
                 Block mọi thử đăng nhập với username "admin" (nếu user đó không tồn tại)</label>
             </td>
         </tr>
+        <tr>
+            <th>Chặn bot dò mật khẩu</th>
+            <td>
+                <input type="hidden" name="adsdefender_settings[bf_require_cookie]" value="0">
+                <label><input type="checkbox" name="adsdefender_settings[bf_require_cookie]" value="1"
+                    <?php checked(!array_key_exists('bf_require_cookie', $opts) || !empty($opts['bf_require_cookie'])); ?>>
+                Từ chối đăng nhập gửi thẳng vào wp-login.php mà không mở trang đăng nhập trước</label>
+                <p class="description">Botnet dò mật khẩu dùng mỗi IP 1–2 lần nên giới hạn theo IP ở trên không bắt được. Người thật luôn mở form trước
+                    (trình duyệt nhận cookie kiểm tra của WordPress), bot POST thẳng thì không có cookie đó → trả 403, ghi log. Không khoá IP.<br>
+                    Form đăng nhập nhúng bằng <code>wp_login_form()</code> vẫn dùng được. Nếu theme có form đăng nhập tự viết (popup…) báo lỗi 403, hãy tắt tuỳ chọn này.</p>
+            </td>
+        </tr>
 
     </table>
 
