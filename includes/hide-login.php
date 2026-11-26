@@ -6,17 +6,22 @@
 /**
  * AdsDefender — Hide Login URL
  *
- * Học từ Solid Security Pro / iThemes Security hide-backend module.
+ * Trang đăng nhập chỉ mở ở URL ẩn (/<slug>/). Người CHƯA đăng nhập:
+ *  • /wp-login.php → 404. Chỉ cho qua: form trang có mật khẩu (postpass), link đặt lại
+ *    mật khẩu có key HỢP LỆ, và POST đăng nhập từ trình duyệt đã mở URL ẩn (cookie 1 giờ)
+ *  • Mọi trang trong /wp-admin/ → 404 (trừ admin-ajax.php và admin-post.php mà form /
+ *    AJAX ngoài website cần). KHÔNG chuyển hướng về URL ẩn kể cả khi có cookie.
+ *  • wp-signup.php / wp-activate.php (site đơn) → 404
+ *  • Lưới an toàn: MỌI chuyển hướng trỏ tới URL ẩn phát sinh từ request không phải URL ẩn
+ *    (wp-register.php, link đặt lại mật khẩu hỏng, auth_redirect…) → 404
+ * Người đã đăng nhập: /wp-login.php và URL ẩn không kèm action → vào thẳng trang quản trị.
  *
- * CƠ CHẾ (giống Solid Security):
- *  1. Hook setup_theme — sớm hơn init, template_redirect
- *  2. Token = chính slug (plain, không cần encrypt)
- *  3. /custom-slug → redirect /wp-login.php?ads-hb-token=slug + set cookie 1h
- *  4. /wp-login.php GET trực tiếp → check token query param hoặc cookie
- *     Nếu không có → block (404 hoặc redirect)
- *  5. is_user_logged_in() → luôn cho qua
- *  6. Bỏ WP built-in wp_redirect_admin_locations (sẽ gây loop)
- *  7. Skip REST API, WP-CLI, cron
+ * Nhận diện request theo cách WordPress đã xác định (hằng WP_ADMIN, $pagenow — đã chữ
+ * thường), KHÔNG so chuỗi URL: /WP-ADMIN/, //wp-admin/, %77p-login.php… không lọt được.
+ * Không áp dụng cho WP-CLI, cron, REST API, XML-RPC.
+ *
+ * Giới hạn: wp-admin/install.php, upgrade.php chạy khi WordPress KHÔNG nạp plugin nên không
+ * chặn được ở đây (chỉ hiện thông báo của WordPress, không có form đăng nhập).
  */
 if (!defined('ABSPATH')) exit;
 
@@ -115,19 +120,44 @@ function adsdefender_hl_is_validated(): bool
     return false;
 }
 
-// ─── Block access ─────────────────────────────────────────────────────────────
+// ─── Phản hồi 404 ────────────────────────────────────────────────────────────
 
+/** 404 tại chỗ như trang không tồn tại — không chuyển hướng (không lộ có trang đăng nhập ẩn) */
+function adsdefender_hl_404(): void
+{
+    adsdefender_block_response('not_found', 404);
+    exit;
+}
+
+/** Giữ cho code cũ gọi tới: chặn trừ khi đã đăng nhập / có cookie URL ẩn */
 function adsdefender_hl_block_access(): void
 {
-    // User đã login → luôn cho qua
-    if (is_user_logged_in()) return;
+    if (is_user_logged_in() || adsdefender_hl_is_validated()) return;
+    adsdefender_hl_404();
+}
 
-    // Có valid token/cookie → cho qua
-    if (adsdefender_hl_is_validated()) return;
+/** Request hiện tại có phải URL ẩn (/<slug> hoặc /<slug>/…) không. Không phân biệt hoa thường. */
+function adsdefender_hl_is_slug_request(): bool
+{
+    static $r = null;
+    if ($r !== null) return $r;
+    $slug = strtolower(adsdefender_hl_slug());
+    if ($slug === '') return $r = false;
+    $path  = rawurldecode(adsdefender_hl_get_request_path());
+    $first = strtolower(explode('/', trim(preg_replace('#/+#', '/', $path), '/'))[0]);
+    return $r = ($first === $slug);
+}
 
-    // Trả 404 tại chỗ như một trang không tồn tại — không redirect (redirect
-    // tới trang chặn cho kẻ dò biết là có trang đăng nhập ẩn ở đâu đó)
-    adsdefender_block_response('not_found', 404);
+/** Link đặt lại mật khẩu có key hợp lệ (trên URL hoặc trong cookie wp-resetpass của WordPress) */
+function adsdefender_hl_valid_reset_key(): bool
+{
+    $key = (string) ($_REQUEST['key'] ?? ''); $login = (string) ($_REQUEST['login'] ?? '');
+    $ck  = 'wp-resetpass-' . COOKIEHASH;
+    if (($key === '' || $login === '') && !empty($_COOKIE[$ck]) && strpos((string) $_COOKIE[$ck], ':') !== false) {
+        [$login, $key] = explode(':', wp_unslash((string) $_COOKIE[$ck]), 2);
+    }
+    if ($key === '' || $login === '') return false;
+    return !is_wp_error(check_password_reset_key($key, $login));
 }
 
 // ─── Serve wp-login.php tại slug — không redirect, không lộ URL ──────────────
@@ -135,34 +165,31 @@ function adsdefender_hl_block_access(): void
 // Giả mạo $_SERVER để wp-login.php nghĩ nó đang được gọi trực tiếp.
 // wp-login.php dùng REQUEST_URI và PHP_SELF để build form action URL —
 // cần giữ nguyên hoặc map về /wp-login.php.
-//
-// KHÔNG dùng require_once trong hook (gây undefined var) — dùng ob_start +
-// require trong global scope sau khi WP đã init xong constants.
 
 function adsdefender_hl_serve_login(): void
 {
-    // Set cookie để validate trong request này và request kế tiếp
+    // Đã đăng nhập mở URL ẩn không kèm action → vào thẳng trang quản trị
+    $action = (string) ($_REQUEST['action'] ?? '');
+    if (is_user_logged_in() && ($action === '' || $action === 'login') && empty($_REQUEST['interim-login'])
+        && empty($_REQUEST['reauth']) && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+        wp_safe_redirect(admin_url());
+        exit;
+    }
+
+    // Cookie đánh dấu trình duyệt đã mở URL ẩn (cho POST đăng nhập gửi thẳng vào wp-login.php)
     adsdefender_hl_set_cookie();
 
-    // Fake SERVER vars để wp-login.php build đúng form action và URLs
     $wp_login_path = '/wp-login.php';
     $qs = $_SERVER['QUERY_STRING'] ?? '';
-
     $_SERVER['REQUEST_URI'] = $qs ? $wp_login_path . '?' . $qs : $wp_login_path;
     $_SERVER['PHP_SELF']    = $wp_login_path;
     $_SERVER['SCRIPT_NAME'] = $wp_login_path;
+    unset($_SERVER['PATH_INFO']);   // gây lỗi ở wp-login.php
 
-    // Xóa PATH_INFO nếu có (gây lỗi dòng 518-519 wp-login.php)
-    unset($_SERVER['PATH_INFO']);
-
-    // wp-login.php khai báo $user_login, $error ở global scope.
-    // require trong function → PHP tạo scope mới → undefined variable warning.
-    // Fix: khai báo global trước khi require để các biến wp-login.php ghi vào
-    // đều visible ở scope đó (tương đương global scope với declare global).
+    // wp-login.php khai báo biến ở global scope; require trong hàm → phải khai báo global trước
     global $user_login, $error, $errors, $interim_login, $action, $user_email,
            $redirect_to, $rememberme, $customize_login, $aria_describedby;
-
-    // Load wp-login.php — nó sẽ tự định nghĩa biến và exit sau khi render
+    $GLOBALS['pagenow'] = 'wp-login.php';
     require ABSPATH . 'wp-login.php';
     exit;
 }
@@ -170,49 +197,32 @@ function adsdefender_hl_serve_login(): void
 // ─── Main: setup_theme hook ───────────────────────────────────────────────────
 
 add_action('setup_theme', function () {
-    if (!adsdefender_hl_enabled()) return;
-
-    $slug = adsdefender_hl_slug();
-    if (!$slug) return;
-
-    // Skip REST API, WP-CLI, cron, AJAX
-    if (defined('WP_CLI')       && WP_CLI)       return;
-    if (defined('DOING_CRON')   && DOING_CRON)   return;
-    if (defined('REST_REQUEST') && REST_REQUEST) return;
+    if (!adsdefender_hl_enabled() || adsdefender_hl_slug() === '') return;
+    if (defined('WP_CLI')         && WP_CLI)         return;
+    if (defined('DOING_CRON')     && DOING_CRON)     return;
+    if (defined('REST_REQUEST')   && REST_REQUEST)   return;
     if (defined('XMLRPC_REQUEST') && XMLRPC_REQUEST) return;
-    if (wp_doing_ajax()) return;
 
-    // Lấy first path segment
-    $full_path = adsdefender_hl_get_request_path();
-    // First segment (vd: "rubi-admin" từ "rubi-admin/something")
-    $first = explode('/', $full_path)[0];
-    // Script filename segment (cho trường hợp PHP chạy qua FastCGI)
-    $script = ltrim(substr($_SERVER['SCRIPT_FILENAME'] ?? '', strlen(ABSPATH ?? '')), '/');
+    // 1. URL ẩn → phục vụ trang đăng nhập tại chỗ
+    if (adsdefender_hl_is_slug_request()) { adsdefender_hl_serve_login(); return; }
 
-    foreach (array_unique([$first, urldecode($first), $script]) as $path) {
-        $path = trim($path, '/');
+    $page   = strtolower((string) ($GLOBALS['pagenow'] ?? ''));
+    $logged = is_user_logged_in();
 
-        // Case 1: Custom slug → serve wp-login.php trực tiếp, KHÔNG redirect
-        if ($path === $slug) {
-            adsdefender_hl_serve_login();
-            return;
-        }
-
-        // Case 2: wp-login.php trực tiếp → chỉ cho qua nếu validated
-        if ($path === 'wp-login.php' || $path === 'wp-login') {
-            adsdefender_hl_handle_login_page();
-            return;
-        }
-
-        // Case 3: wp-admin → 404 nếu chưa login (không redirect để không lộ slug)
-        if ($path === 'wp-admin' || strpos($full_path, 'wp-admin/') === 0) {
-            if (!is_user_logged_in()) {
-                adsdefender_hl_block_access();
-                return;
-            }
-            return; // Đã login → WP tự xử lý
-        }
+    // 2. Khu vực quản trị — WP_ADMIN do chính file trong /wp-admin/ đặt nên không lách được
+    //    bằng chữ hoa / // / mã hoá URL. Chưa đăng nhập → 404, kể cả có cookie URL ẩn (trước
+    //    đây có cookie thì WordPress chuyển hướng /wp-admin/ về URL ẩn → tưởng chưa chặn).
+    if (defined('WP_ADMIN') && WP_ADMIN) {
+        if ($logged) return;
+        if (wp_doing_ajax() || $page === 'admin-post.php') return;   // AJAX / form ngoài website
+        adsdefender_hl_404();
     }
+
+    // 3. wp-login.php
+    if ($page === 'wp-login.php') { adsdefender_hl_handle_login_page(); return; }
+
+    // 4. Đăng ký kiểu multisite trên site đơn → WordPress chuyển hướng về trang đăng ký = URL ẩn
+    if (!$logged && !is_multisite() && in_array($page, ['wp-signup.php', 'wp-activate.php'], true)) adsdefender_hl_404();
 }, 10);
 
 function adsdefender_hl_handle_login_page(): void
@@ -220,46 +230,51 @@ function adsdefender_hl_handle_login_page(): void
     $action = (string) ($_REQUEST['action'] ?? '');
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-    // Actions WordPress cần wp-login.php trực tiếp không qua slug
-    $allowed_actions = ['logout', 'rp', 'resetpass', 'validateresetkey', 'lostpassword', 'postpass'];
-
-    // POST: chỉ cho qua các action trên (postpass — form trang có mật khẩu ở ngoài website;
-    // lostpassword / resetpass). POST ĐĂNG NHẬP phải có cookie của URL ẩn (người thật mở
-    // form qua slug nên luôn có). Trước đây mọi POST đều được cho qua → botnet POST thẳng
-    // vào wp-login.php dò mật khẩu mà Hide Login không chặn được.
-    if ($method === 'POST') {
-        if (in_array($action, $allowed_actions, true) && $action !== 'logout') return;
-        if (is_user_logged_in() || adsdefender_hl_is_validated()) return;
-        if (function_exists('adsdefender_sec_log')) {
-            adsdefender_sec_log('brute_force', adsdefender_get_real_ip(),
-                'hide_login | POST wp-login.php không qua URL ẩn | user=' . substr(sanitize_user(wp_unslash((string) ($_POST['log'] ?? ''))), 0, 60));
-        }
-        adsdefender_hl_block_access();
-        return;
-    }
-
-    // GET /wp-login.php: mọi link / form đăng nhập của WordPress đã được đổi sang URL ẩn
-    // (_adsdefender_hl_mask_login_url) nên không luồng nào cần mở thẳng file này. Trước đây
-    // trình duyệt từng mở URL ẩn (cookie 1 giờ) vẫn thấy form ở /wp-login.php → chính admin
-    // tưởng Hide Login không chạy. Nay luôn 404 cho người chưa đăng nhập, bất kể cookie.
-
-    // Đã đăng nhập: không có action → về trang quản trị (không hiện lại form đăng nhập)
+    // Đã đăng nhập: không action → vào trang quản trị; có action (logout…) → để WordPress xử lý
     if (is_user_logged_in()) {
-        if ($action === '' || $action === 'login') { wp_safe_redirect(admin_url()); exit; }
+        if ($method === 'GET' && ($action === '' || $action === 'login') && empty($_REQUEST['interim-login'])) {
+            wp_safe_redirect(admin_url());
+            exit;
+        }
         return;
     }
 
-    if (in_array($action, $allowed_actions, true)) {
-        // logout cần nonce hợp lệ
-        if ($action === 'logout' && empty($_GET['_wpnonce'])) {
-            adsdefender_block_response('not_found', 404);
-        }
-        return; // Cho qua: link đặt lại mật khẩu trong email cũ, postpass…
-    }
+    // Form trang có mật khẩu — dành cho mọi khách, URL này WordPress giữ nguyên /wp-login.php
+    if ($action === 'postpass') return;
 
-    // Mọi GET khác → 404 như trang không tồn tại
-    adsdefender_block_response('not_found', 404);
+    // Link đặt lại mật khẩu (email gửi trước khi bật Hide Login): chỉ khi key còn hợp lệ.
+    // Key sai / thiếu → WordPress chuyển về form quên mật khẩu = URL ẩn → lộ slug → 404.
+    if (in_array($action, ['rp', 'resetpass'], true) && adsdefender_hl_valid_reset_key()) return;
+
+    // POST đăng nhập từ trình duyệt đã mở URL ẩn (cookie) — form tự viết gửi thẳng vào wp-login.php
+    if ($method === 'POST' && ($action === '' || $action === 'login') && adsdefender_hl_is_validated()) return;
+
+    if ($method === 'POST' && function_exists('adsdefender_sec_log')) {
+        adsdefender_sec_log('brute_force', adsdefender_get_real_ip(),
+            'hide_login | POST wp-login.php không qua URL ẩn | user=' . substr(sanitize_user(wp_unslash((string) ($_POST['log'] ?? ''))), 0, 60));
+    }
+    // Mọi trường hợp khác (form đăng nhập, quên mật khẩu, logout giả, đăng ký…) → 404
+    adsdefender_hl_404();
 }
+
+// ─── Lưới an toàn: không chuyển hướng người lạ tới URL ẩn ────────────────────
+//
+// WordPress có nhiều chỗ tự chuyển hướng về trang đăng nhập / đăng ký (wp-register.php,
+// wp-signup.php, auth_redirect, key đặt lại mật khẩu hỏng…) — mà URL đó đã bị đổi thành
+// URL ẩn. Người chưa đăng nhập, request không phải URL ẩn → thay chuyển hướng bằng 404.
+
+add_filter('wp_redirect', function ($location) {
+    if (!is_string($location) || !adsdefender_hl_enabled()) return $location;
+    $slug = adsdefender_hl_slug();
+    if ($slug === '' || adsdefender_hl_is_slug_request() || is_user_logged_in()) return $location;
+    if (wp_doing_ajax() || (defined('REST_REQUEST') && REST_REQUEST)) return $location;
+    $path = strtolower(rawurldecode((string) parse_url($location, PHP_URL_PATH)));
+    $home = strtolower(rtrim((string) parse_url(home_url('/'), PHP_URL_PATH), '/'));
+    if ($path === $home . '/' . strtolower($slug) || str_starts_with($path, $home . '/' . strtolower($slug) . '/')) {
+        adsdefender_hl_404();
+    }
+    return $location;
+}, PHP_INT_MAX);
 
 // ─── Bỏ WP built-in redirect admin locations (giống Solid Security) ──────────
 // WP core có wp_redirect_admin_locations() ở template_redirect priority 1000.

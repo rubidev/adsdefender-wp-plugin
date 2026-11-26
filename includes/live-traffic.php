@@ -285,10 +285,37 @@ function adsdefender_lt_kind(string $ip, string $ua, int $status): array
             return ['bot', $c === '0' ? 'fake:' . $frag : $frag];
         }
     }
-    if (preg_match('#(bot|crawl|spider|slurp|scan|curl|wget|python|go-http|java/|okhttp|axios|headless|phantom|httpclient|libwww|scrapy|node-fetch)#i', $ua, $m)) {
-        return ['bot', strtolower($m[1])];
+    if (($why = adsdefender_ua_bot_reason($ua)) !== '') return ['bot', $why];
+
+    // File chỉ bot đọc — người xem trang không bao giờ mở robots.txt, ads.txt, sitemap
+    $path = strtolower((string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH));
+    if (preg_match('#/(robots\.txt|ads\.txt|app-ads\.txt|security\.txt|humans\.txt)$|/[^/]*sitemap[^/]*\.xml$|/\.well-known/#', $path, $m)) {
+        return ['bot', ltrim($m[0], '/')];
     }
     return ['human', ''];
+}
+
+/**
+ * UA không phải người xem trang → lý do ngắn; người thật → ''.
+ *  1. Tên bot / công cụ / dịch vụ xem trước link (kể cả loại giả UA trình duyệt)
+ *  2. UA không có dạng trình duyệt: mọi trình duyệt thật (kể cả trình duyệt trong app
+ *     Facebook / Zalo / TikTok) đều bắt đầu "Mozilla/5.0 (" và có engine AppleWebKit /
+ *     Gecko / Trident. "WhatsApp/2", "facebookexternalhit/1.1", "Dart/3", "okhttp"… thì không.
+ */
+function adsdefender_ua_bot_reason(string $ua): string
+{
+    if (preg_match('#(bot\b|bot/|crawl|spider|slurp|scan|externalhit|facebookcatalog|whatsapp|telegram|viber|skypeuripreview|'
+        . 'preview|embedly|iframely|lighthouse|pagespeed|gtmetrix|pingdom|uptime|statuscake|site24x7|monitor|'
+        . 'headless|phantom|selenium|puppeteer|playwright|googleother|google-read-aloud|google-pagerenderer|'
+        . 'curl|wget|python|go-http|java/|okhttp|axios|httpclient|libwww|scrapy|node-fetch|postman|dart/|wordpress/)#i', $ua, $m)) {
+        return strtolower(rtrim($m[1], '/'));
+    }
+    if (!preg_match('#^Mozilla/5\.0 \(#', $ua) || !preg_match('#AppleWebKit|Gecko/|Trident/#i', $ua)) {
+        // Opera Presto cũ ("Opera/9.80 (…) Presto") là trình duyệt thật
+        if (preg_match('#^Opera/\d.*Presto#', $ua)) return '';
+        return 'tool:' . strtolower(substr((string) preg_replace('#[/ ;(].*$#', '', $ua), 0, 20));
+    }
+    return '';
 }
 
 // ─── Ghi ──────────────────────────────────────────────────────────────────────
@@ -477,6 +504,11 @@ function adsdefender_cf_detect(int $row_id, string $ip, string $kind, string $cf
     $since = date('Y-m-d H:i:s', $now - $c['hours'] * HOUR_IN_SECONDS);
     $ads   = "('google_ads','meta_ads','tiktok_ads','ads')";
     $reason = ''; $detail = ''; $targets = [$ip];
+
+    // Dịch vụ xem trước link (WhatsApp, Facebook, Telegram…) tải URL quảng cáo khi ai đó CHIA SẺ
+    // link — không phải click, Google không tính tiền; WhatsApp còn tải từ chính điện thoại người
+    // gửi → khoá là khoá nhầm khách thật.
+    if ($kind === 'bot' && preg_match('#^(whatsapp|externalhit|facebookcatalog|telegram|viber|skypeuripreview|preview|embedly|iframely)#', $note)) return '';
 
     if ($c['bot'] && $kind === 'bot') {
         $reason = 'bot'; $detail = $note;

@@ -1,6 +1,34 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.130 HIDE LOGIN VIET LAI — kiem thu 48 truong hop tren localhost
+         - FIX /wp-admin/ con vao duoc: trinh duyet tung mo URL an (cookie 1 gio) mo
+           /wp-admin/ thi WordPress chuyen huong ve URL an. Nay chua dang nhap → 404
+           o MOI trang /wp-admin/, ke ca co cookie
+         - FIX lach bang chu hoa / 2 dau gach: /WP-ADMIN/ chuyen huong ve URL an cho
+           BAT KY AI. Nay nhan dien theo hang WP_ADMIN va $pagenow cua WordPress, khong
+           so chuoi URL
+         - FIX lo slug: /wp-signup.php, /wp-register.php, ?action=lostpassword (GET /
+           POST), ?action=rp khong key, logout nonce gia → tat ca 404. Them luoi an
+           toan: moi chuyen huong toi URL an cho nguoi la (request khong phai URL an) → 404
+         - FIX /wp-admin/admin-post.php bi 404 lam hong form ngoai website (nopriv)
+         - Link dat lai mat khau cu (/wp-login.php) chi cho qua khi key con hop le
+         - Da dang nhap mo URL an / wp-login.php → vao thang trang quan tri
+         - Da kiem: dang nhap that, dang xuat, sai mat khau, quen mat khau, dat lai
+           mat khau, dang nhap lai khi het phien, bai co mat khau, admin-ajax, ket hop
+           Brute Force + chi dang nhap tu VN, tat / bat lai Hide Login
+         FIX Live Traffic nhan dien nham bot la "Nguoi that"
+         - WhatsApp/2, facebookexternalhit (xem truoc link khi chia se) va moi UA khong
+           co dang trinh duyet (trinh duyet that luon "Mozilla/5.0 (" + AppleWebKit /
+           Gecko / Trident) → Bot. Them ten: Telegram, Viber, Skype, Slack, Discord,
+           Lighthouse, PageSpeed, GTmetrix, Pingdom, UptimeRobot, Selenium, Puppeteer,
+           Playwright, GoogleOther, Dart, okhttp, Postman, WordPress loopback…
+         - Yeu cau robots.txt, ads.txt, sitemap*.xml, /.well-known/ → Bot
+         - Trinh duyet trong app Facebook / Zalo / TikTok van la nguoi that (da kiem 37 UA)
+         - Click ao: dich vu xem truoc link tai URL quang cao khi ai do chia se link —
+           khong tinh la click ao (WhatsApp tai tu chinh dien thoai nguoi gui → khoa nham)
+         - Migration: doi cac dong cu ghi nham "Nguoi that" thanh Bot
+
  2.5.129 Hide Login: /wp-login.php LUON 404 voi nguoi chua dang nhap
          - Truoc: trinh duyet tung mo URL an trong 1 gio (cookie) van mo duoc form o
            /wp-login.php → chinh admin thu thay form, tuong Hide Login khong chay

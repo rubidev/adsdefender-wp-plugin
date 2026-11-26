@@ -32,6 +32,22 @@ add_action('plugins_loaded', function () {
 
 function adsdefender_run_migrations(string $from): void
 {
+    // Migration 2.5.130 — dòng Live Traffic cũ ghi "Người thật" nhưng là bot: UA không phải trình
+    // duyệt (WhatsApp/2, facebookexternalhit…) hoặc yêu cầu file chỉ bot đọc (robots.txt, sitemap…)
+    if (version_compare($from, '2.5.130', '<') && function_exists('adsdefender_ua_bot_reason')) {
+        global $wpdb;
+        $lt = $wpdb->prefix . 'adsdefender_traffic';
+        $suppress = $wpdb->suppress_errors(true);
+        foreach ((array) $wpdb->get_col("SELECT DISTINCT user_agent FROM `{$lt}` WHERE kind = 'human' AND via < 2") as $ua) {
+            $why = $ua === '' ? 'no-ua' : adsdefender_ua_bot_reason((string) $ua);
+            if ($why !== '') $wpdb->query($wpdb->prepare(
+                "UPDATE `{$lt}` SET kind = 'bot', note = %s WHERE kind = 'human' AND via < 2 AND user_agent = %s", substr($why, 0, 40), $ua));
+        }
+        $wpdb->query("UPDATE `{$lt}` SET kind = 'bot', note = 'robots.txt' WHERE kind = 'human' AND via < 2
+            AND (url LIKE '%/robots.txt' OR url LIKE '%/ads.txt' OR url LIKE '%/app-ads.txt' OR url LIKE '%sitemap%.xml' OR url LIKE '%/.well-known/%')");
+        $wpdb->suppress_errors($suppress);
+    }
+
     // Migration 2.5.127 — dòng Live Traffic cũ của bot dò mật khẩu bị ghi là "Người thật":
     // POST wp-login.php từ IP chưa từng mở trang đăng nhập, và mọi POST xmlrpc.php
     if (version_compare($from, '2.5.127', '<')) {
