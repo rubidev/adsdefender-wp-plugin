@@ -1,6 +1,33 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.126 FIX Live Traffic tach 1 chien dich thanh 2 dong ("24545854213" va "#24545854213")
+         - Tai khoan dat utm_campaign={campaignid} ghi chien dich bang ID so tran, con
+           click chi co gad_campaignid (gbraid / PMax / auto-tagging) ghi "#id" → bang
+           Theo chien dich chia doi so click, IP, xem tiep cua cung mot chien dich
+         - utm_campaign toan chu so nay duoc coi la ID → gom chung dang "#id"
+         - Migration: doi cac dong cu ghi ID so tran sang "#id"
+         VI TRI KHACH (IP2Location.io / ip-api.com)
+         - Duoi moi IP trong Live Traffic / Block Log / Security Events hien quoc gia,
+           tinh / thanh pho, nha mang + nhan "datacenter" (IP may chu / cloud — thuong
+           la bot, VPN), "di dong" (3G/4G/5G), "proxy"
+         - Mac dinh IP2Location.io (tinh / thanh o VN sat hon): khong key 1.000 luot /
+           ngay, key Free 50.000 luot / thang, goi song song. Goi Free khong co
+           usage_type → nhan datacenter suy tu ASN cac nha cung cap cloud lon
+         - Tuy chon ip-api.com: batch 100 IP / lan, co san nhan di dong / datacenter
+         - Chi tra IP dang hien thi trong trang quan tri (khong tra luc khach truy cap),
+           cache 30 ngay moi IP trong bang adsdefender_geo; doi nguon → xoa cache
+         - Cai dat (Chong Click Fraud → Ket noi): bat / tat, chon nguon, key
+           IP2Location.io, key ip-api Pro
+         LOG CHAN CO COT "LY DO"
+         - Truoc day log chan chi luu IP / URL / UA — khong biet vi sao bi chan. Nay
+           ghi ma ly do o moi diem chan: UA bi chan (kem ten, vd. bytespider), SQLi /
+           XSS / LFI / RCE, khong UA, qua nhieu request, quet 404, honeypot, IP chan
+           thu cong, danh sach click ao, visitor Matomo, dang bi khoa tam (kem nguon)
+         - Migration: them cot reason; dien ly do cho log cu tu Security Log (cung IP,
+           lech <= 2 giay) voi firewall / rate limit / quet 404. Log cu khong ghep
+           duoc hien "—"
+
  2.5.125 FIX Live Traffic bao nham "gclid dang ngo — sai dinh dang" voi gbraid / wbraid that
          - gbraid / wbraid that bat dau "0AAAA" + ky tu thay doi theo tai khoan
            (0AAAAA…, 0AAAAB…, 0AAAAC…). Ban cu chi chap nhan "0AAAAA" nen click Google

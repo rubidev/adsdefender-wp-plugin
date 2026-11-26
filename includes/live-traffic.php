@@ -200,6 +200,13 @@ function adsdefender_lt_tracking(string $url, string $referer): array
 
     $name = $pick(['utm_campaign', 'campaign', 'campaignname', 'campaign_name', 'utm_campaign_name', 'cmp']);
     $cid  = $pick(['campaignid', 'campaign_id', 'gad_campaignid', 'utm_id', 'hsa_cam'], 40);
+    // utm_campaign toàn chữ số = ID chiến dịch (nhiều tài khoản đặt utm_campaign={campaignid}).
+    // Gom về dạng "#id" như click chỉ có gad_campaignid — không thì cùng 1 chiến dịch bị
+    // tách làm 2 dòng ("24545854213" và "#24545854213") trong bảng Theo chiến dịch.
+    if ($name !== '' && ctype_digit($name)) {
+        if ($cid === '') $cid = $name;
+        $name = '';
+    }
     $kw   = $pick(['utm_term', 'keyword', 'kw', 'keywords', 'term', 'matchedkeyword']);
     $kwsrc = '';
     if ($kw === '' && $referer !== '') {

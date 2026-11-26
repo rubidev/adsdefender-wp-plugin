@@ -656,7 +656,7 @@ function adsdefender_page_seclog(): void
     <p style="color:#666;font-size:13px;margin-bottom:8px">Tổng <strong><?php echo $total; ?></strong> sự kiện<?php if ($ip_filter) echo ' — IP: <code>' . esc_html($ip_filter) . '</code>'; ?></p>
 
     <table class="widefat" style="font-size:12px">
-      <thead><tr><th style="width:140px">Thời gian</th><th style="width:110px">Loại</th><th style="width:130px">IP</th><th>Chi tiết</th><th style="width:50px">Rep.</th></tr></thead>
+      <thead><tr><th style="width:140px">Thời gian</th><th style="width:110px">Loại</th><th style="width:170px">IP / Vị trí</th><th>Chi tiết</th><th style="width:50px">Rep.</th></tr></thead>
       <tbody>
       <?php if (empty($rows)): ?>
       <tr><td colspan="5" style="text-align:center;color:#999;padding:20px">Không có sự kiện nào.</td></tr>
@@ -671,6 +671,7 @@ function adsdefender_page_seclog(): void
           <code style="font-size:11px"><?php echo esc_html($row['ip']); ?></code>
           <?php if ($row['ip']): ?>
           <a href="<?php echo esc_url(add_query_arg(['page'=>'adsdefender-security','tab'=>'events','sip'=>$row['ip'],'stype'=>'','spg'=>1], admin_url('admin.php'))); ?>" title="Lọc IP này" style="color:#999;font-size:10px;margin-left:4px">▼</a>
+          <span class="ads-geo" data-ip="<?php echo esc_attr($row['ip']); ?>"></span>
           <?php endif; ?>
         </td>
         <td style="color:#555;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?php echo esc_attr($row['detail']); ?>"><?php echo esc_html($row['detail']); ?></td>
@@ -815,7 +816,7 @@ function adsdefender_page_adminlog(): void
              style="font-size:11px;font-family:monospace"><?php echo esc_html($row['user_login']); ?></a>
           <?php else: ?><span style="color:#999;font-size:11px">—</span><?php endif; ?>
         </td>
-        <td><code style="font-size:11px"><?php echo esc_html($row['ip'] ?: '—'); ?></code></td>
+        <td><code style="font-size:11px"><?php echo esc_html($row['ip'] ?: '—'); ?></code><?php if ($row['ip']): ?><span class="ads-geo" data-ip="<?php echo esc_attr($row['ip']); ?>"></span><?php endif; ?></td>
         <td style="color:#555;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
             title="<?php echo esc_attr($row['detail']); ?>"><?php echo esc_html($row['detail']); ?></td>
         <td><?php if ($row['ip']): ?>

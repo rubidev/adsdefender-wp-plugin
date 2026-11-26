@@ -112,7 +112,7 @@ function adsdefender_rate_limit_check(): void
     if ($count > $cfg['max_requests']) {
         // Lockout tạm thời
         adsdefender_upsert_lockout($ip, 'rate_limit');
-        adsdefender_log_block($ip);
+        adsdefender_log_block($ip, 'rate_limit');
         adsdefender_sec_log('rate_limit', $ip, "{$count} req / {$cfg['window_secs']}s");
 
         adsdefender_block_response('rate_limit', 429, $cfg['lockout_mins'] * 60);

@@ -287,7 +287,7 @@ function adsdefender_fw_block(string $ip, string $reason, string $uri, bool $loc
     if ($ip) {
         if ($lockout) {
             adsdefender_upsert_lockout($ip, 'firewall');
-            adsdefender_log_block($ip);
+            adsdefender_log_block($ip, $reason);
         }
         adsdefender_sec_log('firewall', $ip, $reason . ' | ' . substr($uri, 0, 200));
     }

@@ -101,7 +101,7 @@ add_action('wp', function () {
 
     if ($count >= $cfg['max_404']) {
         adsdefender_upsert_lockout($ip, '404_flood');
-        adsdefender_log_block($ip);
+        adsdefender_log_block($ip, 'flood_404');
         adsdefender_sec_log('flood_404', $ip, "{$count}x 404 | {$uri}");
         // Không exit ở đây — để WP render trang 404 bình thường
         // IP sẽ bị block ở request tiếp theo qua check_ip()

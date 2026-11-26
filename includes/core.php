@@ -32,6 +32,38 @@ add_action('plugins_loaded', function () {
 
 function adsdefender_run_migrations(string $from): void
 {
+    // Migration 2.5.126 — cột reason cho block log (trước đây log chặn không ghi lý do).
+    // dbDelta không ALTER được vì câu CREATE dùng "IF NOT EXISTS" → thêm cột thủ công.
+    // Điền lý do cho log cũ từ security log (cùng IP, lệch ≤ 2 giây) khi tìm được.
+    if (version_compare($from, '2.5.126', '<')) {
+        if (function_exists('adsdefender_geo_create_table')) adsdefender_geo_create_table();   // cache vị trí IP
+        global $wpdb;
+        $bl = $wpdb->prefix . ADSDEFENDER_LOG_TABLE;
+        $sl = $wpdb->prefix . 'adsdefender_security_log';
+        $suppress = $wpdb->suppress_errors(true);
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$bl}'") === $bl
+            && !$wpdb->get_var("SHOW COLUMNS FROM `{$bl}` LIKE 'reason'")) {
+            $wpdb->query("ALTER TABLE `{$bl}` ADD COLUMN reason VARCHAR(80) NOT NULL DEFAULT '' AFTER user_agent");
+        }
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$sl}'") === $sl) {
+            $wpdb->query("UPDATE `{$bl}` b JOIN `{$sl}` s
+                ON s.ip = b.ip AND s.created_at BETWEEN b.blocked_at - INTERVAL 2 SECOND AND b.blocked_at + INTERVAL 2 SECOND
+                SET b.reason = LEFT(IF(s.event_type = 'firewall', SUBSTRING_INDEX(s.detail, ' | ', 1), s.event_type), 80)
+                WHERE b.reason = '' AND s.event_type IN ('firewall', 'rate_limit', 'flood_404')");
+        }
+        $wpdb->suppress_errors($suppress);
+    }
+
+    // Migration 2.5.126 — chiến dịch ghi bằng ID số trần (utm_campaign={campaignid}) đổi
+    // về "#id" để gom chung với click chỉ có gad_campaignid
+    if (version_compare($from, '2.5.126', '<')) {
+        global $wpdb;
+        $lt = $wpdb->prefix . 'adsdefender_traffic';
+        $suppress = $wpdb->suppress_errors(true);
+        $wpdb->query("UPDATE `{$lt}` SET campaign = CONCAT('#', campaign) WHERE campaign REGEXP '^[0-9]+$'");
+        $wpdb->suppress_errors($suppress);
+    }
+
     // Migration 2.5.125 — bỏ cờ "gclid sai định dạng" gắn nhầm cho gbraid / wbraid hợp lệ
     // bắt đầu 0AAAAB…, 0AAAAC… (bản cũ chỉ chấp nhận 0AAAAA…)
     if (version_compare($from, '2.5.125', '<')) {
@@ -202,6 +234,7 @@ function adsdefender_create_log_table()
         ip          VARCHAR(45)  NOT NULL,
         url         VARCHAR(500) NOT NULL DEFAULT '',
         user_agent  VARCHAR(300) NOT NULL DEFAULT '',
+        reason      VARCHAR(80)  NOT NULL DEFAULT '',
         blocked_at  DATETIME     NOT NULL,
         PRIMARY KEY (id),
         KEY idx_ip (ip),
@@ -276,15 +309,16 @@ function adsdefender_upsert_lockout(string $ip, string $source = 'matomo'): void
 /**
  * Kiểm tra xem IP có đang trong lockout tạm thời không.
  */
-function adsdefender_check_lockout(string $ip): bool
+function adsdefender_check_lockout(string $ip, ?string &$source = null): bool
 {
     global $wpdb;
     $table = $wpdb->prefix . ADSDEFENDER_LOCKOUT_TABLE;
-    $count = (int) $wpdb->get_var($wpdb->prepare(
-        "SELECT COUNT(*) FROM `{$table}` WHERE ip = %s AND is_active = 1 AND expires_at > NOW()",
+    $src = $wpdb->get_var($wpdb->prepare(
+        "SELECT source FROM `{$table}` WHERE ip = %s AND is_active = 1 AND expires_at > NOW() LIMIT 1",
         $ip
     ));
-    return $count > 0;
+    $source = (string) $src;
+    return $src !== null;
 }
 
 /**
@@ -591,21 +625,21 @@ function adsdefender_check_ip()
     // Kiểm tra visitor ID từ cookie Matomo — block dù IP mới (P2: IP rotation fraud)
     $visitor_id = adsdefender_get_matomo_visitor_id();
     if ($visitor_id && adsdefender_is_visitor_blocked($visitor_id)) {
-        adsdefender_log_block($ip);
+        adsdefender_log_block($ip, 'visitor');
         adsdefender_block_visitor($opts['block_action'] ?? 'redirect', $opts);
         return;
     }
 
     $manual = adsdefender_get_manual_ips();
     if (!empty($manual) && adsdefender_ip_matches($ip, array_column($manual, 'ip'))) {
-        adsdefender_log_block($ip);
+        adsdefender_log_block($ip, 'manual');
         adsdefender_block_visitor($opts['block_action'] ?? 'redirect', $opts);
         return;
     }
 
     // Lockout tạm thời (PHP-level, có expire)
-    if (adsdefender_check_lockout($ip)) {
-        adsdefender_log_block($ip);
+    if (adsdefender_check_lockout($ip, $lock_src)) {
+        adsdefender_log_block($ip, 'lockout:' . $lock_src);
         adsdefender_block_visitor($opts['block_action'] ?? 'redirect', $opts);
         return;
     }
@@ -614,7 +648,7 @@ function adsdefender_check_ip()
     if (empty($blocked)) return;
 
     if (adsdefender_ip_matches($ip, $blocked)) {
-        adsdefender_log_block($ip);
+        adsdefender_log_block($ip, 'blocklist');
         adsdefender_block_visitor($opts['block_action'] ?? 'redirect', $opts);
     }
 }
@@ -736,19 +770,64 @@ function adsdefender_ip_matches(string $ip, array $list): bool
     return false;
 }
 
-function adsdefender_log_block(string $ip): void
+/**
+ * Mã lý do chặn → nhãn tiếng Việt cho trang log. Mã có thể kèm chi tiết sau dấu ':'
+ * (bad_ua:bytespider, lockout:firewall).
+ */
+function adsdefender_block_reason_label(string $reason): string
+{
+    if ($reason === '') return '';
+    [$code, $detail] = array_pad(explode(':', $reason, 2), 2, '');
+    $map = [
+        'visitor'     => 'Visitor Matomo đã bị chặn (đổi IP vẫn nhận ra)',
+        'manual'      => 'IP trong danh sách chặn thủ công',
+        'blocklist'   => 'IP trong danh sách chặn click ảo',
+        'sqli'        => 'Firewall: SQL injection',
+        'xss'         => 'Firewall: chèn script (XSS)',
+        'traversal'   => 'Firewall: dò file hệ thống / LFI',
+        'shellcode'   => 'Firewall: chèn mã thực thi (RCE)',
+        'bad_ua'      => 'User-Agent bị chặn',
+        'empty_ua'    => 'Không có User-Agent, vào trang nhạy cảm',
+        'rate_limit'  => 'Quá nhiều request',
+        'flood_404'   => 'Dò quét liên tục (nhiều lỗi 404)',
+        '404_flood'   => 'Dò quét liên tục (nhiều lỗi 404)',
+        'honeypot'    => 'Điền vào ô bẫy bot (honeypot)',
+        'brute_force' => 'Đăng nhập sai nhiều lần',
+        'firewall'    => 'Firewall',
+        'matomo'      => 'Click ảo (Matomo)',
+        'clickfraud'  => 'Click ảo (Live Traffic)',
+    ];
+    if ($code === 'lockout') {
+        return 'Đang bị khoá tạm' . ($detail !== '' ? ' — ' . ($map[$detail] ?? $detail) : '');
+    }
+    $label = $map[$code] ?? $code;
+    return $detail !== '' ? $label . ': ' . $detail : $label;
+}
+
+/**
+ * Ghi 1 lần chặn vào block log. $reason: mã lý do (xem adsdefender_block_reason_label()).
+ */
+function adsdefender_log_block(string $ip, string $reason = ''): void
 {
     if (empty(adsdefender_settings()['log_enabled'])) return;
     global $wpdb;
     $table = $wpdb->prefix . ADSDEFENDER_LOG_TABLE;
     $url   = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
            . '://' . ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '');
-    $wpdb->insert($table, [
+    $row = [
         'ip'         => $ip,
         'url'        => substr($url, 0, 500),
         'user_agent' => substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 300),
+        'reason'     => substr($reason, 0, 80),
         'blocked_at' => current_time('mysql'),
-    ]);
+    ];
+    $suppress = $wpdb->suppress_errors(true);
+    // Bảng cũ chưa có cột reason (migration chưa chạy) → vẫn ghi được phần còn lại
+    if ($wpdb->insert($table, $row) === false) {
+        unset($row['reason']);
+        $wpdb->insert($table, $row);
+    }
+    $wpdb->suppress_errors($suppress);
     if (mt_rand(1, 100) === 1) {
         $count = (int) $wpdb->get_var("SELECT COUNT(*) FROM `{$table}`");
         if ($count > 10000) {

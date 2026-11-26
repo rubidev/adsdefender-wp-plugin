@@ -103,7 +103,7 @@ function adsdefender_settings_sections(): array
                               'behind_cloudflare', 'behind_proxy', 'trusted_proxies',
                               'block_action', 'redirect_url',
                               'lockout_duration', 'ban_threshold', 'ban_period', 'ban_limit_htaccess',
-                              'abuseipdb_key'],
+                              'abuseipdb_key', 'geo_enabled', 'geo_provider', 'geo_key_i2l', 'geo_key'],
         'sec_firewall'    => ['fw_enabled', 'ua_enabled', 'seo_bot_block',
                               'rl_enabled', 'rl_max_requests', 'rl_window_secs', 'rl_lockout_mins',
                               'detect_404', 'detect_404_max', 'detect_404_window', 'detect_404_lockout'],
@@ -244,6 +244,11 @@ function adsdefender_sanitize_settings_full(array $in): array
         'ban_period'         => max(1,  (int)($in['ban_period']         ?? 7)),
         'ban_limit_htaccess' => max(10, (int)($in['ban_limit_htaccess'] ?? 100)),
         'abuseipdb_key'      => sanitize_text_field($in['abuseipdb_key'] ?? ''),
+        // Vị trí IP — mặc định BẬT: form gửi kèm hidden geo_enabled=0 nên bỏ tick vẫn nhận được 0
+        'geo_enabled'        => array_key_exists('geo_enabled', $in) ? (!empty($in['geo_enabled']) ? 1 : 0) : 1,
+        'geo_provider'       => ($in['geo_provider'] ?? '') === 'ipapi' ? 'ipapi' : 'ip2location',
+        'geo_key_i2l'        => preg_replace('/[^A-Za-z0-9]/', '', (string) ($in['geo_key_i2l'] ?? '')),
+        'geo_key'            => preg_replace('/[^A-Za-z0-9]/', '', (string) ($in['geo_key'] ?? '')),
         'admin_log_enabled'  => !empty($in['admin_log_enabled']) ? 1 : 0,
 
         // ── Brute Force ──
@@ -471,6 +476,93 @@ function adsdefender_ip_rep_modal(): void
       $(document).on('click','#ads-ip-rep-close',function(){$('#ads-ip-rep-modal').hide();});
       $(document).on('click','#ads-ip-rep-modal',function(e){if($(e.target).is('#ads-ip-rep-modal'))$(this).hide();});
     })(jQuery);
+    </script>
+    <?php
+    adsdefender_geo_script();
+}
+
+// ─── Vị trí IP ────────────────────────────────────────────────────────────────
+//
+// Mọi phần tử <span class="ads-geo" data-ip="…"></span> trên trang được điền vị trí
+// (kể cả dòng Live Traffic thêm vào sau — theo dõi bằng MutationObserver). IP đã
+// tra được nhớ trong trang, chỉ hỏi server những IP mới.
+
+function adsdefender_geo_script(): void
+{
+    static $done = false;
+    if ($done || !function_exists('adsdefender_geo_enabled') || !adsdefender_geo_enabled()) return;
+    $done = true;
+    ?>
+    <style>
+    .ads-geo{display:block;font-size:11px;color:#50575e;line-height:1.35;margin-top:2px;max-width:260px}
+    .ads-geo:empty{display:none}
+    .ads-geo .cc{display:inline-block;font:600 10px/14px monospace;background:#f0f0f1;border-radius:3px;padding:0 3px;margin-right:3px;color:#1d2327}
+    .ads-geo .isp{color:#8c8f94}
+    .ads-geo .tg{display:inline-block;font-size:10px;border-radius:3px;padding:0 4px;margin-left:3px}
+    .ads-geo .tg.dc{background:#fcf0f1;color:#b32d2e}
+    .ads-geo .tg.mb{background:#edfaef;color:#00712d}
+    .ads-geo .tg.px{background:#fcf9e8;color:#8a6d00}
+    </style>
+    <script>
+    (function () {
+        var ajax = <?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, nonce = <?php echo wp_json_encode(wp_create_nonce('adsdefender_geo')); ?>;
+        var cache = {}, pending = {}, timer = null, stop = false;
+        function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+        function html(g) {
+            if (!g) return '';
+            if (g.local) return '<span class="isp">IP nội bộ</span>';
+            if (g.err) return '<span class="isp">Không rõ vị trí</span>';
+            // Trong nước: thành phố, tỉnh — nước ngoài: thành phố, quốc gia (bỏ trùng: "Da Nang, Da Nang")
+            var place = (g.cc === 'VN' ? [g.city, g.region] : [g.city, g.country])
+                .filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(', ') || g.country || '';
+            var h = (g.cc ? '<span class="cc">' + esc(g.cc) + '</span>' : '') + esc(place);
+            if (g.hosting) h += '<span class="tg dc" title="IP của datacenter / cloud — thường là bot, VPN hoặc proxy, không phải khách thật">datacenter</span>';
+            else if (g.mobile) h += '<span class="tg mb" title="Mạng di động 3G/4G/5G — vị trí thường là nơi đặt gateway của nhà mạng, không chính xác tới tỉnh">di động</span>';
+            if (g.proxy) h += '<span class="tg px" title="Proxy / VPN / Tor">proxy</span>';
+            if (g.isp) h += '<br><span class="isp">' + esc(g.isp) + '</span>';
+            return h;
+        }
+        function title(g) {
+            if (!g || g.local || g.err) return '';
+            return 'Vị trí ước lượng theo IP\n' + [g.city, g.region, g.country].filter(Boolean).join(', ') +
+                (g.isp ? '\nNhà mạng: ' + g.isp : '') + (g.as ? '\n' + g.as : '');
+        }
+        function paint(root) {
+            var need = [];
+            (root || document).querySelectorAll('.ads-geo[data-ip]:not([data-done])').forEach(function (el) {
+                var ip = el.getAttribute('data-ip');
+                if (cache[ip]) { el.innerHTML = html(cache[ip]); el.title = title(cache[ip]); el.setAttribute('data-done', '1'); }
+                else if (!pending[ip] && need.indexOf(ip) < 0) need.push(ip);
+            });
+            return need;
+        }
+        function run() {
+            timer = null;
+            if (stop) return;
+            var need = paint().slice(0, 100);
+            if (!need.length) return;
+            need.forEach(function (ip) { pending[ip] = 1; });
+            var fd = new FormData();
+            fd.append('action', 'adsdefender_geo'); fd.append('nonce', nonce);
+            need.forEach(function (ip) { fd.append('ips[]', ip); });
+            fetch(ajax, {method: 'POST', body: fd, credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (res) {
+                need.forEach(function (ip) { delete pending[ip]; });
+                if (!res || !res.success) return;
+                if (res.data.off) { stop = true; return; }
+                var geo = res.data.geo || {};
+                for (var ip in geo) cache[ip] = geo[ip];
+                paint();
+                // Còn IP chưa tra được (hết lượt miễn phí) → thử lại sau
+                if (need.some(function (ip) { return !cache[ip]; })) setTimeout(schedule, res.data.wait ? 30000 : 3000);
+            }).catch(function () { need.forEach(function (ip) { delete pending[ip]; }); });
+        }
+        function schedule() { if (!timer) timer = setTimeout(run, 300); }
+        window.adsGeo = {refresh: schedule};
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule); else schedule();
+        new MutationObserver(function (ms) {
+            for (var i = 0; i < ms.length; i++) if (ms[i].addedNodes.length) { schedule(); return; }
+        }).observe(document.body, {childList: true, subtree: true});
+    })();
     </script>
     <?php
 }

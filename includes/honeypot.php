@@ -64,7 +64,7 @@ function adsdefender_hp_validate(): void
         $ip = adsdefender_get_real_ip();
         if ($ip) {
             adsdefender_upsert_lockout($ip, 'honeypot');
-            adsdefender_log_block($ip);
+            adsdefender_log_block($ip, 'honeypot');
         }
 
         adsdefender_block_response('honeypot', 403);

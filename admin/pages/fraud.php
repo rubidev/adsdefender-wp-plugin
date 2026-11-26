@@ -201,6 +201,52 @@ function adsdefender_fraud_tab_connect(): void
             </td>
         </tr>
     </table>
+<h3 style="font-size:14px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid #eee">📍 Vị trí khách</h3>
+    <table class="form-table">
+        <tr id="geo">
+            <th>Hiện vị trí IP</th>
+            <td>
+                <input type="hidden" name="adsdefender_settings[geo_enabled]" value="0">
+                <label><input type="checkbox" name="adsdefender_settings[geo_enabled]" value="1" <?php checked(adsdefender_geo_enabled()); ?>>
+                    Hiện quốc gia / tỉnh / nhà mạng dưới mỗi IP trong Live Traffic, Block Log, Security Events</label>
+                <p class="description">Chỉ tra các IP đang hiển thị trong trang quản trị (không tra lúc khách truy cập, không làm chậm web), cache 30 ngày mỗi IP.
+                    IP được gửi tới dịch vụ tra cứu bên dưới. Nhãn <b>datacenter</b> = IP máy chủ / cloud (thường là bot, VPN), <b>di động</b> = mạng 3G/4G/5G.<br>
+                    Lưu ý: vị trí theo IP chỉ là ước lượng — IP 4G ở Việt Nam thường hiện Hà Nội / TP.HCM (nơi đặt gateway nhà mạng) dù khách ở tỉnh khác.</p>
+            </td>
+        </tr>
+        <tr>
+            <th>Nguồn tra</th>
+            <td>
+                <?php $gp = adsdefender_geo_provider(); ?>
+                <label style="display:block;margin-bottom:6px"><input type="radio" name="adsdefender_settings[geo_provider]" value="ip2location" <?php checked($gp, 'ip2location'); ?>>
+                    <b>IP2Location.io</b> (khuyên dùng) — tỉnh / thành ở Việt Nam sát hơn</label>
+                <label style="display:block"><input type="radio" name="adsdefender_settings[geo_provider]" value="ipapi" <?php checked($gp, 'ipapi'); ?>>
+                    <b>ip-api.com</b> — có sẵn nhãn di động / datacenter, tra nhanh 100 IP / lần</label>
+                <p class="description">Đổi nguồn sẽ xoá cache vị trí cũ để tra lại bằng nguồn mới.</p>
+            </td>
+        </tr>
+        <tr>
+            <th>IP2Location.io key</th>
+            <td>
+                <input type="password" name="adsdefender_settings[geo_key_i2l]"
+                    value="<?php echo esc_attr($opts['geo_key_i2l'] ?? ''); ?>"
+                    class="regular-text" placeholder="Để trống = 1.000 lượt / ngày" autocomplete="new-password">
+                <p class="description">Đăng ký miễn phí tại <a href="https://www.ip2location.io/sign-up" target="_blank">ip2location.io</a> để có 50.000 lượt / tháng (dùng thương mại được).
+                    Gói Free không báo mạng di động — nhãn <b>datacenter</b> được nhận ra theo ASN của các nhà cung cấp cloud lớn (Google, AWS, Azure, Alibaba…).
+                    Gói trả phí (có <i>usage_type</i>) hiện đủ nhãn di động / datacenter.</p>
+            </td>
+        </tr>
+        <tr>
+            <th>ip-api Pro key</th>
+            <td>
+                <input type="password" name="adsdefender_settings[geo_key]"
+                    value="<?php echo esc_attr($opts['geo_key'] ?? ''); ?>"
+                    class="regular-text" placeholder="Để trống = dùng bản miễn phí" autocomplete="new-password">
+                <p class="description">Bản miễn phí: giới hạn 15 lần tra / phút (mỗi lần tới 100 IP), qua HTTP, chỉ cho mục đích phi thương mại.
+                    Dùng cho website kinh doanh nên mua key Pro tại <a href="https://members.ip-api.com/" target="_blank">members.ip-api.com</a> (HTTPS, không giới hạn).</p>
+            </td>
+        </tr>
+    </table>
     <?php
     adsdefender_settings_form_close();
     ?>
@@ -823,7 +869,8 @@ function adsdefender_page_log()
       <thead>
         <tr>
           <th style="width:130px">Thời gian</th>
-          <th style="width:125px">IP</th>
+          <th style="width:170px">IP / Vị trí</th>
+          <th style="width:190px">Lý do</th>
           <th>URL</th>
           <th style="width:160px">User Agent</th>
           <th style="width:80px">Thao tác</th>
@@ -831,7 +878,7 @@ function adsdefender_page_log()
       </thead>
       <tbody>
       <?php if (empty($rows)): ?>
-        <tr><td colspan="5" style="text-align:center;color:#999;padding:20px">Chưa có log nào.</td></tr>
+        <tr><td colspan="6" style="text-align:center;color:#999;padding:20px">Chưa có log nào.</td></tr>
       <?php else: foreach ($rows as $row):
         $is_manual = in_array($row->ip, $already_blocked);
         $is_matomo = in_array($row->ip, $matomo_ips);
@@ -843,6 +890,12 @@ function adsdefender_page_log()
             <?php if ($is_manual): ?><span title="Block thủ công" style="color:#f0860a;font-size:11px"> ✋</span>
             <?php elseif ($is_matomo): ?><span title="Block từ Matomo" style="color:#2271b1;font-size:11px"> 📊</span>
             <?php endif; ?>
+            <span class="ads-geo" data-ip="<?php echo esc_attr($row->ip); ?>"></span>
+          </td>
+          <td style="font-size:11px">
+            <?php $rl = adsdefender_block_reason_label((string) ($row->reason ?? ''));
+            if ($rl !== ''): ?><span title="<?php echo esc_attr($row->reason); ?>" style="color:#b32d2e"><?php echo esc_html($rl); ?></span>
+            <?php else: ?><span style="color:#999" title="Log ghi trước bản 2.5.126 — khi đó chưa lưu lý do">—</span><?php endif; ?>
           </td>
           <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
             <span title="<?php echo esc_attr($row->url); ?>" style="color:#555"><?php echo esc_html($row->url); ?></span>
@@ -1313,7 +1366,8 @@ function adsdefender_fraud_tab_live(): void
             tr.innerHTML =
                 '<td><span title="' + esc(r.date) + '">' + esc(r.time) + '</span></td>' +
                 '<td><code style="font-size:12px">' + esc(r.ip) + '</code>' + you + ti +
-                    '<br><span style="font-size:11px;color:#8c8f94">mã ' + esc(r.ref) + '</span></td>' +
+                    '<br><span style="font-size:11px;color:#8c8f94">mã ' + esc(r.ref) + '</span>' +
+                    '<span class="ads-geo" data-ip="' + esc(r.ip) + '"></span></td>' +
                 '<td>' + (r.conv ? '<span class="lt-k conv">' + esc(r.conv_name) + '</span>' + (r.kind !== 'human' ? '<br><span class="lt-k ' + esc(r.kind) + '"' + kindTitle + '>' + esc(KIND[r.kind] || r.kind) + '</span>' : '')
                                  : '<span class="lt-k ' + esc(r.kind) + '"' + kindTitle + '>' + esc(KIND[r.kind] || r.kind) + '</span>') + '</td>' +
                 '<td>' + srcBadge(r) + '</td>' +

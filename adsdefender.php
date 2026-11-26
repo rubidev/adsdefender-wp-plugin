@@ -171,6 +171,7 @@ foreach ([
     ['block-page.php',       null],        // trang chặn dùng chung cho mọi module
     ['live-traffic.php',     null],        // ghi truy cập — tự tắt khi lt_enabled = 0
     ['security-log.php',     null],        // dashboard đọc thống kê kể cả khi tắt Bảo mật
+    ['geo.php',              null],        // vị trí IP (ip-api.com) cho các trang danh sách IP
     ['admin-log.php',        'security'],
     ['brute-force.php',      'security'],
     ['firewall.php',         'security'],
@@ -228,6 +229,7 @@ function adsdefender_install_tables(): void
         'adsdefender_create_utm_table', 'adsdefender_create_lead_table',
         'adsdefender_create_bf_table', 'adsdefender_create_admin_log_table',
         'adsdefender_fm_create_table', 'adsdefender_scan_create_table', 'adsdefender_lt_create_table',
+        'adsdefender_geo_create_table',
     ] as $fn) {
         if (function_exists($fn)) $fn();
     }
