@@ -1,6 +1,13 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.125 FIX Live Traffic bao nham "gclid dang ngo — sai dinh dang" voi gbraid / wbraid that
+         - gbraid / wbraid that bat dau "0AAAA" + ky tu thay doi theo tai khoan
+           (0AAAAA…, 0AAAAB…, 0AAAAC…). Ban cu chi chap nhan "0AAAAA" nen click Google
+           Ads that (thuong la iOS / Android chan theo doi) bi gan co do
+         - Migration: go co "format" da gan nham trong bang Live Traffic
+         - Co nay chi anh huong hien thi / thong ke "gclid gia", khong dung de tu chan IP
+
  2.5.124 FIX cPGuard VAN CACH LY includes/firewall.php ({CPG}.php.IndoXploit.005)
          - 2.5.123 an tu khoa bang lop ky tu nhung van bi bat → chu ky khong dua tren
            cac tu do. Nay chuyen TOAN BO bo luat Firewall (UA xau, bot SEO, pattern

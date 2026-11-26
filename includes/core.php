@@ -32,6 +32,17 @@ add_action('plugins_loaded', function () {
 
 function adsdefender_run_migrations(string $from): void
 {
+    // Migration 2.5.125 — bỏ cờ "gclid sai định dạng" gắn nhầm cho gbraid / wbraid hợp lệ
+    // bắt đầu 0AAAAB…, 0AAAAC… (bản cũ chỉ chấp nhận 0AAAAA…)
+    if (version_compare($from, '2.5.125', '<')) {
+        global $wpdb;
+        $lt = $wpdb->prefix . 'adsdefender_traffic';
+        $suppress = $wpdb->suppress_errors(true);   // bảng có thể chưa tạo (Live Traffic tắt)
+        $wpdb->query("UPDATE `{$lt}` SET click_flag = '' WHERE click_flag = 'format'
+                      AND url NOT LIKE '%gclid=%' AND (url REGEXP '[?&](gbraid|wbraid)=0AAAA[A-Za-z0-9_-]{15}')");
+        $wpdb->suppress_errors($suppress);
+    }
+
     // Migration 2.5.122 — trang chặn render tại chỗ, bỏ file tĩnh trong thư mục gốc;
     // bảng Live Traffic
     if (version_compare($from, '2.5.122', '<')) {

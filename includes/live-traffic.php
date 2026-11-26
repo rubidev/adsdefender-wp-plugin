@@ -285,7 +285,8 @@ function adsdefender_lt_should_log(): bool
 /**
  * Kiểm tra click ID Google Ads có dấu hiệu giả mạo không. Không thể xác minh tuyệt đối
  * (chỉ Google Ads API biết) nhưng gclid giả thường lộ qua 1 trong 3 dấu hiệu:
- *   format  — sai định dạng (gclid thật: base64url ≥ 40 ký tự; gbraid / wbraid bắt đầu "0AAAAA")
+ *   format  — sai định dạng (gclid thật: base64url ≥ 40 ký tự; gbraid / wbraid bắt đầu "0AAAA" —
+ *             ký tự thứ 6 thay đổi theo tài khoản: 0AAAAA…, 0AAAAB…, 0AAAAC…, không cố định là "A")
  *   reuse   — gclid đã gặp ở IP khác hoặc cùng IP cách > 30 phút (mỗi click thật có gclid riêng)
  *   referer — có referer nhưng không phải Google / mạng quảng cáo Google (referer rỗng vẫn hợp lệ:
  *             app, Display, trình duyệt chặn referer)
@@ -302,7 +303,7 @@ function adsdefender_lt_check_click(string $url, string $referer, string $ip, st
     if ($type === '') return ['', ''];
     $hash = substr(hash('sha256', $type . ':' . $id), 0, 16);
 
-    if ($type === 'gclid' ? !preg_match('/^[A-Za-z0-9_-]{40,250}$/', $id) : !preg_match('/^0AAAAA[A-Za-z0-9_-]{14,250}$/', $id)) {
+    if ($type === 'gclid' ? !preg_match('/^[A-Za-z0-9_-]{40,250}$/', $id) : !preg_match('/^0AAAA[A-Za-z0-9_-]{15,250}$/', $id)) {
         return [$hash, 'format'];
     }
     global $wpdb;
