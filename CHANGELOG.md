@@ -1,6 +1,14 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.129 Hide Login: /wp-login.php LUON 404 voi nguoi chua dang nhap
+         - Truoc: trinh duyet tung mo URL an trong 1 gio (cookie) van mo duoc form o
+           /wp-login.php → chinh admin thu thay form, tuong Hide Login khong chay
+         - Moi link / form dang nhap cua WordPress da tro ve URL an nen khong luong nao
+           can mo thang /wp-login.php. Van cho qua: postpass (trang co mat khau), link
+           dat lai mat khau, logout co nonce
+         - Da dang nhap ma mo /wp-login.php → chuyen thang vao trang quan tri
+
  2.5.128 FIX danh sach "Loai tru IP trong Google Ads" loc sai
          - Truoc: lay MOI lockout 30 ngay (firewall, quet 404, do mat khau, rate limit,
            honeypot) + toan bo danh sach chan thu cong / ban tu dong → toan bot quet web,

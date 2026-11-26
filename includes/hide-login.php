@@ -238,23 +238,27 @@ function adsdefender_hl_handle_login_page(): void
         return;
     }
 
-    // User đã login → cho qua
-    if (is_user_logged_in()) return;
+    // GET /wp-login.php: mọi link / form đăng nhập của WordPress đã được đổi sang URL ẩn
+    // (_adsdefender_hl_mask_login_url) nên không luồng nào cần mở thẳng file này. Trước đây
+    // trình duyệt từng mở URL ẩn (cookie 1 giờ) vẫn thấy form ở /wp-login.php → chính admin
+    // tưởng Hide Login không chạy. Nay luôn 404 cho người chưa đăng nhập, bất kể cookie.
 
-    // Có valid token hoặc cookie → cho qua
-    if (adsdefender_hl_is_validated()) return;
+    // Đã đăng nhập: không có action → về trang quản trị (không hiện lại form đăng nhập)
+    if (is_user_logged_in()) {
+        if ($action === '' || $action === 'login') { wp_safe_redirect(admin_url()); exit; }
+        return;
+    }
 
     if (in_array($action, $allowed_actions, true)) {
         // logout cần nonce hợp lệ
         if ($action === 'logout' && empty($_GET['_wpnonce'])) {
-            adsdefender_hl_block_access();
-            return;
+            adsdefender_block_response('not_found', 404);
         }
-        return; // Cho qua
+        return; // Cho qua: link đặt lại mật khẩu trong email cũ, postpass…
     }
 
-    // Mọi GET khác → block
-    adsdefender_hl_block_access();
+    // Mọi GET khác → 404 như trang không tồn tại
+    adsdefender_block_response('not_found', 404);
 }
 
 // ─── Bỏ WP built-in redirect admin locations (giống Solid Security) ──────────
