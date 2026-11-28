@@ -16,6 +16,31 @@ function adsdefender_security_tab_firewall(): void
     $opts = adsdefender_settings();
     adsdefender_settings_form_open('sec_firewall');
     ?>
+    <?php if (function_exists('adsdefender_lg_check')):
+        $gd = get_option(ADSDEFENDER_LG_OPTION, []);
+        $gip = adsdefender_get_real_ip();
+        [$g_ok, $g_why] = adsdefender_lg_check($gip); ?>
+    <h3 style="font-size:14px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid #eee">🇻🇳 Chỉ phục vụ khách Việt Nam</h3>
+    <table class="form-table">
+        <tr id="geo-site">
+            <th>Chặn IP nước ngoài</th>
+            <td>
+                <label><input type="checkbox" name="adsdefender_settings[geo_site_vn_only]" value="1" <?php checked(!empty($opts['geo_site_vn_only'])); ?>>
+                    Chỉ cho khách Việt Nam truy cập website (IP nước ngoài nhận trang 403)</label>
+                <p class="description">Vẫn cho qua: mạng <b>Google</b> (Googlebot, Google kiểm tra quảng cáo, proxy tải trước của Chrome) và <b>Cloudflare</b> (gồm WARP),
+                    bot tìm kiếm đã xác minh (Bing, Apple, Yandex…), dịch vụ xem trước link (Facebook, Zalo, Telegram…), Whitelist, IP quản trị, người đã đăng nhập.
+                    Không áp dụng cho REST API, <code>/wc-api/</code>, XML-RPC, cron — webhook cổng thanh toán từ nước ngoài vẫn chạy.<br>
+                    Phù hợp site chỉ bán cho khách trong nước: chặn bot cào dữ liệu, bot dò lỗ hổng, click ảo từ nước ngoài.
+                    Khách Việt Nam đang ở nước ngoài / dùng VPN nước ngoài sẽ bị chặn. Khẩn cấp: <code>define('ADSDEFENDER_NO_COUNTRY_LOCK', true);</code> trong wp-config.php.</p>
+                <p style="margin-top:6px">IP của bạn: <code><?php echo esc_html($gip); ?></code>
+                    <?php if (empty($gd['v4h'])): ?><span style="color:#996800">— chưa tải danh sách IP Việt Nam (sẽ tải khi bật)</span>
+                    <?php elseif ($g_ok): ?><span style="color:#00a32a;font-weight:600">✓ được phép (<?php echo esc_html($g_why); ?>)</span>
+                    <?php else: ?><span style="color:#d63638;font-weight:600">✗ không được phép — không thể bật</span><?php endif; ?></p>
+            </td>
+        </tr>
+    </table>
+    <?php endif; ?>
+
     <h3 style="font-size:14px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid #eee">🛡️ Request Firewall</h3>
     <table class="form-table">
         <tr>

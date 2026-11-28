@@ -873,6 +873,7 @@ function adsdefender_block_reason_label(string $reason): string
         'brute_force' => 'Đăng nhập sai nhiều lần',
         'login_bot'   => 'Bot dò mật khẩu (POST thẳng vào wp-login.php)',
         'login_geo'   => 'Vào trang đăng nhập từ ngoài Việt Nam',
+        'geo_foreign' => 'IP ngoài Việt Nam (chỉ phục vụ khách VN)',
         'firewall'    => 'Firewall',
         'matomo'      => 'Click ảo (Matomo)',
         'clickfraud'  => 'Click ảo (Live Traffic)',

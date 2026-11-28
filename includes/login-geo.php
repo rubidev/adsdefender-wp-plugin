@@ -23,6 +23,11 @@
  *  • Khẩn cấp: define('ADSDEFENDER_NO_COUNTRY_LOCK', true); trong wp-config.php
  *  • Người đã đăng nhập không bị ảnh hưởng; khách nước ngoài vẫn đăng nhập tài khoản
  *    mua hàng (WooCommerce) được — chỉ chặn tài khoản có quyền biên tập trở lên
+ *
+ * Tuỳ chọn thứ 2 dùng chung danh sách: "Chỉ cho khách Việt Nam truy cập website" (geo_site_vn_only)
+ * — chặn cả website với IP ngoài VN, trừ mạng Google / Cloudflare, bot tìm kiếm đã xác minh,
+ * dịch vụ xem trước link; không đụng REST API / wc-api / XML-RPC / cron (webhook thanh toán…).
+ * Live Traffic cũng dùng dải IP RIÊNG của Google để nhận ra lượt Google kiểm tra quảng cáo.
  */
 if (!defined('ABSPATH')) exit;
 
@@ -33,6 +38,20 @@ function adsdefender_lg_enabled(): bool
 {
     if (defined('ADSDEFENDER_NO_COUNTRY_LOCK') && ADSDEFENDER_NO_COUNTRY_LOCK) return false;
     return !empty(adsdefender_settings()['lg_vn_only']);
+}
+
+/** Chỉ cho khách Việt Nam truy cập website */
+function adsdefender_geo_site_enabled(): bool
+{
+    if (defined('ADSDEFENDER_NO_COUNTRY_LOCK') && ADSDEFENDER_NO_COUNTRY_LOCK) return false;
+    return !empty(adsdefender_settings()['geo_site_vn_only']);
+}
+
+/** Có tính năng nào cần danh sách IP không (để tải / làm mới hằng tuần) */
+function adsdefender_lg_needed(): bool
+{
+    return adsdefender_lg_enabled() || adsdefender_geo_site_enabled()
+        || (function_exists('adsdefender_lt_opts') && adsdefender_lt_opts()['enabled']);   // Live Traffic nhận diện Google kiểm tra QC
 }
 
 // ─── Tải + biên dịch danh sách ───────────────────────────────────────────────
@@ -99,6 +118,7 @@ function adsdefender_lg_sync(): array
 
     // 2. Proxy lớn: Google (trừ Google Cloud cho thuê) + Cloudflare. Lỗi thì giữ phần cũ.
     $pv4h = (string) ($old['pv4h'] ?? ''); $pv6 = (array) ($old['pv6'] ?? []);
+    $gv4h = (string) ($old['gv4h'] ?? ''); $gv6 = (array) ($old['gv6'] ?? []);
     $goog  = json_decode(adsdefender_lg_fetch(['https://www.gstatic.com/ipranges/goog.json']), true);
     $cloud = json_decode(adsdefender_lg_fetch(['https://www.gstatic.com/ipranges/cloud.json']), true);
     $cf4   = adsdefender_lg_fetch(['https://www.cloudflare.com/ips-v4']);
@@ -116,6 +136,8 @@ function adsdefender_lg_sync(): array
         }
         $p6 = array_values(array_diff($p6, $cloud6));
         $proxy = adsdefender_lg_subtract(adsdefender_ti_pack($g4), adsdefender_ti_pack($c4));
+        $gv4h  = bin2hex($proxy);                 // CHỈ Google (đã trừ Google Cloud cho thuê)
+        $gv6   = $p6;
         $cfr = [];
         foreach (preg_split('/\s+/', trim($cf4)) as $c) if ($r = adsdefender_ti_v4_range($c)) $cfr[] = $r;
         foreach (preg_split('/\s+/', trim($cf6)) as $c) if (strpos($c, ':') !== false) $p6[] = $c;
@@ -131,17 +153,38 @@ function adsdefender_lg_sync(): array
         'v6'      => $v6,
         'pv4h'    => $pv4h,
         'pv6'     => $pv6,
+        'gv4h'    => $gv4h,
+        'gv6'     => $gv6,
         'vn_count'=> count($v4) + count($v6),
         'updated' => time(),
         'error'   => '',
     ], false);
     $GLOBALS['adsdefender_lg_cache'] = null;
+
+    // Sửa dòng Live Traffic cũ: "người thật" mà IP thuộc mạng riêng của Google → Google kiểm tra QC
+    if ($gv4h !== '' && defined('ADSDEFENDER_TRAFFIC_TABLE')) {
+        global $wpdb;
+        $lt = $wpdb->prefix . ADSDEFENDER_TRAFFIC_TABLE;
+        $suppress = $wpdb->suppress_errors(true);
+        foreach ((array) $wpdb->get_col("SELECT DISTINCT ip FROM `{$lt}` WHERE kind = 'human' AND note NOT LIKE 'prefetch%'") as $ip) {
+            if (adsdefender_lg_is_google_ip((string) $ip)) {
+                $wpdb->query($wpdb->prepare("UPDATE `{$lt}` SET kind = 'good_bot', note = 'google-check' WHERE ip = %s AND kind = 'human' AND note NOT LIKE 'prefetch%%'", $ip));
+            }
+        }
+        $wpdb->suppress_errors($suppress);
+    }
     return ['ok' => true, 'count' => count($v4) + count($v6)];
 }
 
-add_action(ADSDEFENDER_LG_CRON, function () { if (adsdefender_lg_enabled()) adsdefender_lg_sync(); });
+add_action(ADSDEFENDER_LG_CRON, function () { if (adsdefender_lg_needed()) adsdefender_lg_sync(); });
+add_action(ADSDEFENDER_LG_CRON . '_once', function () { if (adsdefender_lg_needed()) adsdefender_lg_sync(); });
 add_action('init', function () {
-    if (adsdefender_lg_enabled() && !wp_next_scheduled(ADSDEFENDER_LG_CRON)) {
+    // Dữ liệu tải từ bản cũ chưa tách riêng dải Google → tải lại 1 lần (chạy nền qua cron)
+    if (adsdefender_lg_needed() && empty(get_option(ADSDEFENDER_LG_OPTION, [])['gv4h'])
+        && !wp_next_scheduled(ADSDEFENDER_LG_CRON . '_once')) {
+        wp_schedule_single_event(time() + 30, ADSDEFENDER_LG_CRON . '_once');
+    }
+    if (adsdefender_lg_needed() && !wp_next_scheduled(ADSDEFENDER_LG_CRON)) {
         wp_schedule_event(time() + 600, 'weekly', ADSDEFENDER_LG_CRON);
     }
 });
@@ -156,7 +199,15 @@ function adsdefender_lg_data(): array
     return $GLOBALS['adsdefender_lg_cache'] = [
         'vn4' => $bin((string) ($d['v4h'] ?? '')), 'vn6' => (array) ($d['v6'] ?? []),
         'px4' => $bin((string) ($d['pv4h'] ?? '')), 'px6' => (array) ($d['pv6'] ?? []),
+        'g4'  => $bin((string) ($d['gv4h'] ?? '')), 'g6'  => (array) ($d['gv6'] ?? []),
     ];
+}
+
+/** IP thuộc mạng RIÊNG của Google (không gồm Google Cloud cho thuê, không gồm Cloudflare) */
+function adsdefender_lg_is_google_ip(string $ip): bool
+{
+    $d = adsdefender_lg_data();
+    return $ip !== '' && ($d['g4'] !== '' || $d['g6']) && adsdefender_lg_in($ip, $d['g4'], $d['g6']);
 }
 
 function adsdefender_lg_in(string $ip, string $bin4, array $list6): bool
@@ -226,7 +277,12 @@ add_filter('authenticate', function ($user) {
 
 // Bật tuỳ chọn khi chưa có danh sách → tải ngay
 add_action('update_option_adsdefender_settings', function ($old, $new) {
-    if (!empty($new['lg_vn_only']) && empty($old['lg_vn_only']) && !get_option(ADSDEFENDER_LG_OPTION)) adsdefender_lg_sync();
+    $on = fn($o, $k) => is_array($o) && !empty($o[$k]);
+    if ((($on($new, 'lg_vn_only') && !$on($old, 'lg_vn_only')) || ($on($new, 'geo_site_vn_only') && !$on($old, 'geo_site_vn_only'))
+         || ($on($new, 'lt_enabled') && !$on($old, 'lt_enabled')))
+        && empty(get_option(ADSDEFENDER_LG_OPTION, [])['gv4h'])) {
+        adsdefender_lg_sync();
+    }
 }, 20, 2);
 
 add_action('wp_ajax_adsdefender_lg_sync', function () {
@@ -235,3 +291,43 @@ add_action('wp_ajax_adsdefender_lg_sync', function () {
     $r = adsdefender_lg_sync();
     $r['ok'] ? wp_send_json_success($r) : wp_send_json_error($r['error']);
 });
+
+// ─── Chỉ cho khách Việt Nam truy cập website ─────────────────────────────────
+//
+// init priority 0 (cùng lúc Threat Intel, trước firewall / click ảo). Cho qua:
+//  • IP VN, mạng Google / Cloudflare, whitelist, IP quản trị (adsdefender_lg_check)
+//  • người đã đăng nhập; bot tìm kiếm đã xác minh rDNS (Bing, Apple, Yandex…)
+//  • dịch vụ xem trước link (Facebook, Zalo, Telegram…) — khách chia sẻ link vẫn hiện ảnh
+//  • REST API, /wc-api/, XML-RPC, cron, CLI — webhook cổng thanh toán, Jetpack từ nước ngoài
+// Không khoá IP (lockout), chỉ trả 403 + ghi log.
+
+function adsdefender_geo_site_exempt(): bool
+{
+    if (defined('WP_CLI') && WP_CLI) return true;
+    if (defined('DOING_CRON') && DOING_CRON) return true;
+    if (defined('XMLRPC_REQUEST') && XMLRPC_REQUEST) return true;
+    $path = strtolower((string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH));
+    $rest = '/' . trim((string) (function_exists('rest_get_url_prefix') ? rest_get_url_prefix() : 'wp-json'), '/') . '/';
+    if (str_contains($path, $rest) || isset($_GET['rest_route']) || str_contains($path, '/wc-api/') || isset($_GET['wc-api'])) return true;
+    if (str_ends_with($path, '/xmlrpc.php') || str_ends_with($path, '/wp-cron.php')) return true;
+    return false;
+}
+
+add_action('init', function () {
+    if (!adsdefender_geo_site_enabled() || adsdefender_geo_site_exempt()) return;
+    if (is_user_logged_in()) return;
+    $ip = adsdefender_get_real_ip();
+    if (!$ip) return;
+    [$ok, $why] = adsdefender_lg_check($ip);
+    if ($ok) return;
+
+    // Dịch vụ xem trước link (UA có thể giả, nhưng chỉ lấy được thẻ og:, không làm gì khác)
+    $ua = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
+    if (preg_match('#facebookexternalhit|facebookcatalog|whatsapp|telegrambot|zalo|twitterbot|linkedinbot|slackbot|discordbot|skypeuripreview|viber|pinterest|redditbot|embedly|iframely#i', $ua)) return;
+    // Bot tìm kiếm đã xác minh rDNS (Googlebot đã nằm trong mạng Google ở trên)
+    if (adsdefender_is_verified_bot($ip)) return;
+
+    if (function_exists('adsdefender_log_block')) adsdefender_log_block($ip, 'geo_foreign');
+    adsdefender_block_response('geo', 403);
+}, 0);
+

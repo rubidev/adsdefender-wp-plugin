@@ -104,7 +104,7 @@ function adsdefender_settings_sections(): array
                               'block_action', 'redirect_url',
                               'lockout_duration', 'ban_threshold', 'ban_period', 'ban_limit_htaccess',
                               'abuseipdb_key', 'geo_enabled', 'geo_provider', 'geo_key_i2l', 'geo_key'],
-        'sec_firewall'    => ['fw_enabled', 'ua_enabled', 'seo_bot_block',
+        'sec_firewall'    => ['fw_enabled', 'ua_enabled', 'seo_bot_block', 'geo_site_vn_only',
                               'rl_enabled', 'rl_max_requests', 'rl_window_secs', 'rl_lockout_mins',
                               'detect_404', 'detect_404_max', 'detect_404_window', 'detect_404_lockout'],
         'sec_login'       => ['bf_enabled', 'bf_check_period', 'bf_max_ip', 'bf_max_user', 'bf_lockout_mins', 'bf_block_admin', 'bf_require_cookie',
@@ -130,15 +130,15 @@ function adsdefender_settings_sections(): array
  * Bật "chỉ đăng nhập từ VN" mà IP hiện tại của admin không được phép → từ chối bật,
  * tránh tự khoá mình ở lần đăng nhập sau. Chưa có danh sách thì tải trước rồi mới kiểm tra.
  */
-function adsdefender_sanitize_lg_vn_only(bool $want): int
+function adsdefender_sanitize_lg_vn_only(bool $want, string $key = 'lg_vn_only', string $label = 'Chỉ đăng nhập từ Việt Nam'): int
 {
     if (!$want || !function_exists('adsdefender_lg_check')) return $want ? 1 : 0;
     if (!get_option(ADSDEFENDER_LG_OPTION)) adsdefender_lg_sync();
     $ip = adsdefender_get_real_ip();
     [$ok, $why] = adsdefender_lg_check($ip);
     if ($ok) return 1;
-    add_settings_error('adsdefender_settings', 'lg_vn_only',
-        'Không bật "Chỉ đăng nhập từ Việt Nam": IP hiện tại của bạn (' . esc_html($ip) . ') không phải IP Việt Nam / Google / Cloudflare — bật lên bạn sẽ không đăng nhập lại được. Thêm IP này vào Whitelist trước nếu cần.');
+    add_settings_error('adsdefender_settings', $key,
+        'Không bật "' . $label . '": IP hiện tại của bạn (' . esc_html($ip) . ') không phải IP Việt Nam / Google / Cloudflare — bật lên bạn sẽ không đăng nhập lại được. Thêm IP này vào Whitelist trước nếu cần.');
     return 0;
 }
 
@@ -279,6 +279,7 @@ function adsdefender_sanitize_settings_full(array $in): array
 
         // ── Firewall ──
         'fw_enabled'         => !empty($in['fw_enabled'])       ? 1 : 0,
+        'geo_site_vn_only'   => adsdefender_sanitize_lg_vn_only(!empty($in['geo_site_vn_only']), 'geo_site_vn_only', 'Chỉ cho khách Việt Nam truy cập website'),
         'ua_enabled'         => !empty($in['ua_enabled'])       ? 1 : 0,
         'seo_bot_block'      => !empty($in['seo_bot_block'])    ? 1 : 0,
 

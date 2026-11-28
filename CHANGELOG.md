@@ -1,6 +1,22 @@
 # AdsDefender — Changelog
 
 ```text
+ 2.5.133 CHI PHUC VU KHACH VIET NAM (Bao mat → Firewall, mac dinh TAT)
+         - IP nuoc ngoai nhan trang 403 "Website chi phuc vu khach tai Viet Nam". Van cho
+           qua: mang Google (Googlebot, Google kiem tra quang cao, proxy tai truoc
+           Chrome), Cloudflare (gom WARP), bot tim kiem da xac minh rDNS (Bing, Apple,
+           Yandex…), dich vu xem truoc link (Facebook, Zalo, Telegram…), whitelist,
+           IP quan tri, nguoi da dang nhap
+         - Khong ap dung cho REST API, /wc-api/, XML-RPC, cron → webhook cong thanh toan
+           nuoc ngoai van chay. Khong khoa IP, chi tu choi + ghi Block Log
+         - Dung chung danh sach IP VN (APNIC) voi "Chi dang nhap tu VN"; IP admin hien
+           tai khong phai VN → tu choi bat; khan cap ADSDEFENDER_NO_COUNTRY_LOCK
+         LIVE TRAFFIC: GOOGLE KIEM TRA QUANG CAO
+         - UA trinh duyet (gia iPhone…) nhung IP thuoc mang RIENG cua Google (tru Google
+           Cloud cho thue) → "Bot that · google-check", khong con tinh la nguoi that /
+           click quang cao. Tai lai danh sach thi tu sua cac dong cu ghi nham
+         - Danh sach IP tu tai khi bat Live Traffic (truoc chi khi bat chi-dang-nhap-VN)
+
  2.5.132 Live Traffic tach tab: 👤 Khach truy cap | 🤖 Bot & bi chan | Tat ca
          - Mac dinh mo tab Khach truy cap (nguoi that, ke ca chuyen doi) — bot, cong cu,
            xem truoc link, request bi chan sang tab rieng, nhan tab hien so bot + bi

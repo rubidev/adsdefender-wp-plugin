@@ -296,6 +296,11 @@ function adsdefender_lt_kind(string $ip, string $ua, int $status): array
     }
     if (($why = adsdefender_ua_bot_reason($ua)) !== '') return ['bot', $why];
 
+    // UA trình duyệt nhưng IP thuộc mạng RIÊNG của Google (không phải Google Cloud cho thuê):
+    // Google kiểm tra trang đích quảng cáo / chính sách (cố ý giả iPhone, Chrome…). Người dùng
+    // thật không có IP này — trừ khi qua proxy tải trước của Chrome, đã nhận ở trên (Sec-Purpose).
+    if (function_exists('adsdefender_lg_is_google_ip') && adsdefender_lg_is_google_ip($ip)) return ['good_bot', 'google-check'];
+
     // File chỉ bot đọc — người xem trang không bao giờ mở robots.txt, ads.txt, sitemap
     $path = strtolower((string) parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH));
     if (preg_match('#/(robots\.txt|ads\.txt|app-ads\.txt|security\.txt|humans\.txt)$|/[^/]*sitemap[^/]*\.xml$|/\.well-known/#', $path, $m)) {
